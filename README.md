@@ -223,10 +223,11 @@ pit.restatements(fields=["Revenues"])             # periods whose value changed 
   sentence. `confidence` is 1.0 for XBRL. For text rows it is the model probability (NER)
   or NULL for the regex extractor, which has no calibrated score.
 
-Built from the default universe: **83,666 rows**, made up of 81,697 XBRL facts across 26
+Built from the default universe: **83,666 rows**, made up of 81,697 XBRL facts across 27
 canonical fields and every filing that reported them, plus 1,969 reconciled text values.
-**125 (company, field, fiscal period) values since 2020 changed after first being
-reported.** Examples:
+By `pit.restatements()` (any change in value between filings), **136 annual (company,
+field, period) values ending 2020 or later changed after first being reported**, or 527
+when balance-sheet instants are included. Examples:
 - GE FY2022 revenue: $76.6B as first reported (filed 2023-02-10), then $58.1B after the
   GE HealthCare spin-off, then $29.1B after GE Vernova (-62%).
 - JNJ FY2022 revenue: $94.9B, then $80.0B after the Kenvue separation.
