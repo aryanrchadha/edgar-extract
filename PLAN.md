@@ -205,3 +205,7 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
   rebuilds. Invariants (a)-(d) pass on synthetic data and on the real JNJ (Kenvue) and GE
   (3-version) restatements recorded as fixtures; the Hypothesis property test (150 cases)
   never violates (d). `asof` CLI shows the look-ahead gap next to each value.
+- **M7 done** (2026-10-03). `qa.py` metrics (agreement, XBRL recall, role coverage, PIT
+  coverage, all with n and Wilson intervals); Streamlit + Plotly dashboard verified
+  headless with sockets blocked (AppTest) and visually in a browser; usage-stats
+  telemetry disabled; `--server.headless` avoids Streamlit's blocking first-run prompt.

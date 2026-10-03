@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "qa-dashboard",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "edgar-extract", "dashboard", "--port", "8517"],
+      "port": 8517
+    }
+  ]
+}

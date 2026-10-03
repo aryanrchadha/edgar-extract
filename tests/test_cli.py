@@ -57,10 +57,10 @@ def test_rerun_does_not_duplicate_skip_log(config_path: Path, patched_client: No
     assert len(skips) == 1
 
 
-def test_unimplemented_stage_says_so(config_path: Path, patched_client: None) -> None:
+def test_stage_without_its_inputs_fails_cleanly(config_path: Path, patched_client: None) -> None:
     result = runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "qa"])
-    assert result.exit_code == 2
-    assert "not implemented yet" in result.output
+    assert result.exit_code == 1
+    assert "--stage reconcile" in result.output and "Traceback" not in result.output
 
 
 def test_bad_config_exits_cleanly(tmp_path: Path) -> None:

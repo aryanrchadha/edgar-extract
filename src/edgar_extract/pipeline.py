@@ -544,3 +544,34 @@ def run_pit_stage(settings: Settings) -> dict[str, int]:
     return build_pit_db(
         settings.paths.pit_db, pd.read_parquet(paths["canonical"]), companies, reconciliations
     )
+
+
+# -- QA (M7) ----------------------------------------------------------------------------------
+
+
+def run_qa_stage(settings: Settings) -> Path:
+    """Write reports/qa_summary.md from the built artifacts."""
+    from edgar_extract.qa import summary_markdown
+
+    paths = xbrl_paths(settings)
+    for path, stage in (
+        (paths["reconciliation"], "reconcile"),
+        (paths["canonical"], "xbrl"),
+        (extractions_path(settings), "extract"),
+    ):
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"{path} not found; run `edgar-extract run --stage {stage}` first"
+            )
+    rec = pd.read_parquet(paths["reconciliation"])
+    text = summary_markdown(
+        rec,
+        pd.read_parquet(paths["canonical"]),
+        load_universe(settings),
+        pd.read_parquet(extractions_path(settings)),
+        ", ".join(sorted(rec["extractor"].dropna().unique())) or "no extractor",
+    )
+    out = settings.paths.reports_dir / "qa_summary.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    return out

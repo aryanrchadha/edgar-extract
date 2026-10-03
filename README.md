@@ -5,9 +5,9 @@ Factors (Item 1A), extracts numeric entities from the prose, reconciles them aga
 and stores the result in a **point-in-time (PIT) fundamentals database**: a query "as of
 date D" returns only what was knowable on D.
 
-> Status: **M1-M3, M5 and M6 complete; M4 code complete, waiting for gold labels.** The
-> point-in-time database is built and tested. The NER model is trained and scored only
-> after a person labels the gold set (see "Labeling"). Later stages
+> Status: **M1-M3 and M5-M7 complete; M4 code complete, waiting for gold labels.** The
+> point-in-time database and QA dashboard are built and tested. The NER model is trained
+> and scored only after a person labels the gold set (see "Labeling"). Later stages
 > print "not implemented yet" instead of producing output. See [PLAN.md](PLAN.md) for the
 > design, risks and milestone status.
 
@@ -88,10 +88,12 @@ uv run edgar-extract run --stage reconcile   # -> reconciliation.parquet
 ```bash
 uv run edgar-extract run --stage pit                                   # -> data/pit.duckdb
 uv run edgar-extract asof --ticker GE --date 2023-03-01 --field Revenues
+uv run edgar-extract run --stage qa                                    # -> reports/qa_summary.md
+uv sync --extra dashboard && uv run edgar-extract dashboard           # http://localhost:8501
 ```
 
-Stage commands that land in later milestones (`dashboard`, `run --stage qa`) currently
-exit non-zero with a message saying which milestone implements them.
+`edgar-extract run` (stage `all`) runs every stage in order: universe, sections,
+extract, xbrl, reconcile, pit, qa.
 
 ## SEC access
 
@@ -195,9 +197,9 @@ from edgar_extract.pit_db import PointInTimeDB
 
 pit = PointInTimeDB("data/pit.duckdb", read_only=True)
 pit.as_of("2022-03-01", tickers=["AAPL", "GE"], fields=["Revenues", "Assets"])
-pit.history("GE", "Revenues")                     # every version, restatements included
+pit.history("GE", "Revenues")  # every version, restatements included
 pit.latest_vs_asof("GE", "Revenues", "2023-03-01")  # the look-ahead gap per period
-pit.restatements(fields=["Revenues"])             # periods whose value changed later
+pit.restatements(fields=["Revenues"])  # periods whose value changed later
 ```
 
 - **Keys are dates, never fiscal labels.** Rows are keyed by `(cik, canonical_field,
@@ -241,6 +243,34 @@ GE restatements:
 
 A Hypothesis property test checks (d), plus agreement with a brute-force recomputation,
 for 150 random dates, field sets, tickers and lags.
+
+## QA dashboard (M7)
+
+`edgar-extract dashboard` starts a local Streamlit app that reads only the built
+artifacts. It makes no network calls, and Streamlit usage statistics are turned off in
+`.streamlit/config.toml` and on the command line. It shows:
+
+1. **Precision and recall against XBRL**, by company, fiscal year and mismatch category.
+   Precision is agreement: MATCH / comparable. Recall is the share of each 10-K's own key
+   facts (revenue, R&D, restructuring, impairment, litigation) matched by its prose. Bars
+   carry 95% Wilson intervals, and samples under 30 are greyed.
+2. **Mismatch causes** as a stacked bar per company.
+3. **Role coverage**: per filing and section, the share of numeric spans given a specific
+   role.
+4. **PIT coverage heatmap**: company by fiscal year, colored by the number of versioned
+   rows.
+5. **Accuracy over time**: agreement by fiscal year, one line per extractor; the NER line
+   appears once its reconciliation exists.
+
+Gold-label metrics are embedded when `reports/ner_metrics.md` exists. `edgar-extract run
+--stage qa` writes the same numbers as [reports/qa_summary.md](reports/qa_summary.md).
+
+These measure agreement with XBRL, not correctness. With the regex extractor:
+- **Agreement:** 10.3% of comparable extractions match XBRL exactly; the audit explains
+  why.
+- **Revenue recall:** consolidated revenue is matched in the prose of 58% of 10-Ks (58 of
+  100).
+- **Role coverage:** a median 18% of MD&A numbers get a specific role.
 
 ## Labeling and the NER model (M4)
 

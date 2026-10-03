@@ -1,0 +1,7 @@
+# The QA dashboard reads local artifacts only. Streamlit's usage statistics would send
+# telemetry to Streamlit's servers, so they are turned off.
+[browser]
+gatherUsageStats = false
+
+[server]
+fileWatcherType = "none"

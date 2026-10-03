@@ -19,6 +19,7 @@ from edgar_extract.pipeline import (
     extractions_path,
     run_extract_stage,
     run_pit_stage,
+    run_qa_stage,
     run_reconcile_stage,
     run_sections_stage,
     run_xbrl_stage,
@@ -49,12 +50,6 @@ class Stage(StrEnum):
     all = "all"
 
 
-# Stages land milestone by milestone; until then the CLI says so instead of pretending.
-_NOT_YET: dict[Stage, str] = {
-    Stage.qa: "M7",
-}
-
-
 def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
         level=logging.INFO if verbose else logging.WARNING,
@@ -68,11 +63,6 @@ def _load(config: Path) -> Settings:
     except (ConfigError, ValueError) as exc:
         console.print(f"[red]config error:[/red] {exc}")
         raise typer.Exit(2) from exc
-
-
-def _not_implemented(what: str, milestone: str) -> typer.Exit:
-    console.print(f"[yellow]{what} is not implemented yet (lands in {milestone}).[/yellow]")
-    return typer.Exit(2)
 
 
 def run_universe_stage(settings: Settings, client: EdgarClient) -> pd.DataFrame:
@@ -173,13 +163,8 @@ def run(
             _print_reconciliation(run_reconcile_stage(settings))
         if stage in (Stage.pit, Stage.all):
             console.print(f"pit: {run_pit_stage(settings)} -> {settings.paths.pit_db}")
-        if stage is Stage.all:
-            console.print(
-                "[yellow]Later stages are not implemented yet; "
-                "ran universe, sections, extract, xbrl, reconcile and pit.[/yellow]"
-            )
-        elif stage in _NOT_YET:
-            raise _not_implemented(f"stage '{stage.value}'", _NOT_YET[stage])
+        if stage in (Stage.qa, Stage.all):
+            console.print(f"qa: wrote {run_qa_stage(settings)}")
     except (ConfigError, EdgarError, FileNotFoundError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(1) from exc
@@ -397,9 +382,34 @@ def asof(
 
 
 @app.command()
-def dashboard(config: ConfigOpt = Path("config.yaml")) -> None:
-    """Launch the Streamlit QA dashboard."""
-    raise _not_implemented("dashboard", "M7")
+def dashboard(
+    config: ConfigOpt = Path("config.yaml"),
+    port: Annotated[int, typer.Option(help="Local port")] = 8501,
+) -> None:
+    """Launch the Streamlit QA dashboard on the built artifacts (needs the `dashboard` extra)."""
+    import os
+    import subprocess
+
+    settings = _load(config)
+    app_path = Path(__file__).parent / "dashboard" / "app.py"
+    if importlib_find("streamlit") is None:
+        console.print("[red]streamlit is not installed.[/red] Run `uv sync --extra dashboard`.")
+        raise typer.Exit(1)
+    env = {**os.environ, "EDGAR_EXTRACT_CONFIG": str(config.resolve())}
+    # headless: no interactive first-run prompt and no browser launch; open the URL printed.
+    cmd = [
+        sys.executable, "-m", "streamlit", "run", str(app_path),
+        "--browser.gatherUsageStats", "false", "--server.headless", "true",
+        "--server.port", str(port),
+    ]  # fmt: skip
+    console.print(f"artifacts: {settings.paths.interim_dir}; open http://localhost:{port}")
+    raise typer.Exit(subprocess.call(cmd, env=env))
+
+
+def importlib_find(name: str) -> object | None:
+    from importlib.util import find_spec
+
+    return find_spec(name)
 
 
 if __name__ == "__main__":
