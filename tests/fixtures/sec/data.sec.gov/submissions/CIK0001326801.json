@@ -1,0 +1,190 @@
+{
+ "addresses": {
+  "business": {
+   "city": "MENLO PARK",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": null,
+   "stateOrCountry": "CA",
+   "stateOrCountryDescription": "CA",
+   "street1": "1 META WAY",
+   "street2": null,
+   "zipCode": "94025"
+  },
+  "mailing": {
+   "city": "MENLO PARK",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": 0,
+   "stateOrCountry": "CA",
+   "stateOrCountryDescription": "CA",
+   "street1": "1 META WAY",
+   "street2": null,
+   "zipCode": "94025"
+  }
+ },
+ "category": "Large accelerated filer",
+ "cik": "0001326801",
+ "description": "",
+ "ein": "201665019",
+ "entityType": "operating",
+ "exchanges": [
+  "Nasdaq"
+ ],
+ "filings": {
+  "files": [
+   {
+    "filingCount": 2001,
+    "filingFrom": "2017-05-17",
+    "filingTo": "2024-06-15",
+    "name": "CIK0001326801-submissions-001.json"
+   },
+   {
+    "filingCount": 1192,
+    "filingFrom": "2005-05-06",
+    "filingTo": "2017-05-15",
+    "name": "CIK0001326801-submissions-002.json"
+   }
+  ],
+  "recent": {
+   "acceptanceDateTime": [
+    "2026-09-30T22:22:17.000Z",
+    "2026-09-28T23:47:03.000Z",
+    "2026-09-28T20:00:59.000Z",
+    "2026-01-29T00:13:46.000Z",
+    "2025-01-30T01:00:50.000Z"
+   ],
+   "accessionNumber": [
+    "0000950103-26-014886",
+    "0000950103-26-014647",
+    "0001921094-26-001053",
+    "0001628280-26-003942",
+    "0001326801-25-000017"
+   ],
+   "act": [
+    "",
+    "",
+    "33",
+    "34",
+    "34"
+   ],
+   "core_type": [
+    "4",
+    "4",
+    "144",
+    "XBRL",
+    "XBRL"
+   ],
+   "fileNumber": [
+    "",
+    "",
+    "001-35551",
+    "001-35551",
+    "001-35551"
+   ],
+   "filingDate": [
+    "2026-09-30",
+    "2026-09-28",
+    "2026-09-28",
+    "2026-01-29",
+    "2025-01-30"
+   ],
+   "filmNumber": [
+    "",
+    "",
+    "261417160",
+    "26574094",
+    "25570747"
+   ],
+   "form": [
+    "4",
+    "4",
+    "144",
+    "10-K",
+    "10-K"
+   ],
+   "isInlineXBRL": [
+    0,
+    0,
+    0,
+    1,
+    1
+   ],
+   "isXBRL": [
+    0,
+    0,
+    0,
+    1,
+    1
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    null,
+    null
+   ],
+   "items": [
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "primaryDocDescription": [
+    "FORM 4",
+    "FORM 4",
+    "",
+    "10-K",
+    "10-K"
+   ],
+   "primaryDocument": [
+    "xslF345X06/ownership.xml",
+    "xslF345X06/ownership.xml",
+    "xsl144X01/primary_doc.xml",
+    "meta-20251231.htm",
+    "meta-20241231.htm"
+   ],
+   "reportDate": [
+    "2026-09-28",
+    "2026-09-24",
+    "",
+    "2025-12-31",
+    "2024-12-31"
+   ],
+   "size": [
+    12345,
+    48062,
+    11483,
+    14509410,
+    14236240
+   ]
+  }
+ },
+ "fiscalYearEnd": "1231",
+ "flags": "",
+ "formerNames": [
+  {
+   "from": "2005-05-06T04:00:00.000Z",
+   "name": "Facebook Inc",
+   "to": "2021-10-27T04:00:00.000Z"
+  }
+ ],
+ "insiderTransactionForIssuerExists": 1,
+ "insiderTransactionForOwnerExists": 0,
+ "investorWebsite": "",
+ "lei": null,
+ "name": "Meta Platforms, Inc.",
+ "ownerOrg": "06 Technology",
+ "phone": "650-543-4800",
+ "sic": "7370",
+ "sicDescription": "Services-Computer Programming, Data Processing, Etc.",
+ "stateOfIncorporation": "DE",
+ "stateOfIncorporationDescription": "DE",
+ "tickers": [
+  "META"
+ ],
+ "website": ""
+}

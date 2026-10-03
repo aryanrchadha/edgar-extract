@@ -1,53 +1,66 @@
 [project]
 name = "edgar-extract"
 version = "0.1.0"
-description = "SEC 10-K text-to-numbers extraction with a point-in-time fundamentals database"
-authors = [
-    { name = "Aryan Chadha", email = "achadha5@fordham.edu" }
-]
+description = "SEC 10-K text-to-numbers extraction with XBRL reconciliation and a point-in-time fundamentals database"
+readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Aryan Chadha" }]
 dependencies = [
-    "beautifulsoup4==4.15.0",
-    "duckdb==1.5.6",
-    "lxml==6.1.3",
     "pandas==3.0.6",
     "pyarrow==25.0.1",
     "pydantic==2.13.5",
     "pydantic-settings==2.15.0",
-    "pysbd==0.3.4",
     "pyyaml==6.0.3",
     "requests==2.34.2",
     "rich==15.0.0",
     "typer==0.27.2",
 ]
 
-[project.optional-dependencies]
-dashboard = [
-    "plotly==7.1.0",
-    "streamlit==1.65.0",
-]
-
-[build-system]
-requires = ["uv_build>=0.11.28,<0.12.0"]
-build-backend = "uv_build"
-
-[dependency-groups]
-dev = [
-    "hypothesis==6.168.3",
-    "pytest==9.1.1",
-    "ruff==0.16.10",
-]
-
 [project.scripts]
 edgar-extract = "edgar_extract.cli:app"
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edgar_extract"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "PTH", "ANN"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
+markers = ["network: test needs live SEC access (never run by default)"]
+
+[dependency-groups]
+dev = [
+    "hypothesis==6.168.3",
+    "mypy==2.4.0",
+    "pandas-stubs==3.0.5.260914",
+    "pytest==9.1.1",
+    "ruff==0.16.10",
+    "types-pyyaml==6.0.12.20260906",
+    "types-requests==2.33.0.20260906",
+]

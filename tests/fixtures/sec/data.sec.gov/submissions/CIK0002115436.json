@@ -1,0 +1,155 @@
+{
+ "addresses": {
+  "business": {
+   "city": "SPRING",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": null,
+   "stateOrCountry": "TX",
+   "stateOrCountryDescription": "TX",
+   "street1": "22777 SPRINGWOODS VILLAGE PARKWAY",
+   "street2": null,
+   "zipCode": "77389"
+  },
+  "mailing": {
+   "city": "SPRING",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": 0,
+   "stateOrCountry": "TX",
+   "stateOrCountryDescription": "TX",
+   "street1": "22777 SPRINGWOODS VILLAGE PARKWAY",
+   "street2": null,
+   "zipCode": "77389"
+  }
+ },
+ "category": "Large accelerated filer",
+ "cik": "0002115436",
+ "description": "",
+ "ein": "414104094",
+ "entityType": "operating",
+ "exchanges": [
+  "NYSE"
+ ],
+ "filings": {
+  "files": [],
+  "recent": {
+   "acceptanceDateTime": [
+    "2026-09-25T21:20:49.000Z",
+    "2026-09-25T20:19:05.000Z",
+    "2026-09-25T01:10:19.000Z",
+    "2026-07-01T16:36:49.000Z"
+   ],
+   "accessionNumber": [
+    "0001193125-26-402986",
+    "0002115436-26-000009",
+    "0001193125-26-401391",
+    "0001193125-26-291990"
+   ],
+   "act": [
+    "34",
+    "34",
+    "33",
+    "34"
+   ],
+   "core_type": [
+    "XBRL",
+    "SD",
+    "424B2",
+    "8-K12B"
+   ],
+   "fileNumber": [
+    "001-43384",
+    "001-43384",
+    "333-293558-01",
+    "001-43384"
+   ],
+   "filingDate": [
+    "2026-09-25",
+    "2026-09-25",
+    "2026-09-25",
+    "2026-07-01"
+   ],
+   "filmNumber": [
+    "261411286",
+    "261410651",
+    "261406039",
+    "261143833"
+   ],
+   "form": [
+    "8-K",
+    "SD",
+    "424B2",
+    "8-K12B"
+   ],
+   "isInlineXBRL": [
+    1,
+    0,
+    1,
+    0
+   ],
+   "isXBRL": [
+    1,
+    1,
+    1,
+    0
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "items": [
+    "8.01,9.01",
+    "",
+    "",
+    "1.01,2.01,2.03,3.03,5.02,5.03,9.01"
+   ],
+   "primaryDocDescription": [
+    "8-K",
+    "FORM SD",
+    "424B2",
+    "8-K12B"
+   ],
+   "primaryDocument": [
+    "d15072d8k.htm",
+    "xom2025formsd.htm",
+    "d137820d424b2.htm",
+    "d71068d8k12b.htm"
+   ],
+   "reportDate": [
+    "2026-09-25",
+    "",
+    "",
+    "2026-07-01"
+   ],
+   "size": [
+    671487,
+    4816115,
+    671354,
+    373687
+   ]
+  }
+ },
+ "fiscalYearEnd": "1231",
+ "flags": "",
+ "formerNames": [],
+ "insiderTransactionForIssuerExists": 0,
+ "insiderTransactionForOwnerExists": 0,
+ "investorWebsite": "",
+ "lei": null,
+ "name": "ExxonMobil Holdings Corp",
+ "ownerOrg": "01 Energy & Transportation",
+ "phone": "(972) 940-6000",
+ "sic": "2911",
+ "sicDescription": "Petroleum Refining",
+ "stateOfIncorporation": "TX",
+ "stateOfIncorporationDescription": "TX",
+ "tickers": [
+  "XOM"
+ ],
+ "website": ""
+}

@@ -1,0 +1,285 @@
+{
+ "addresses": {
+  "business": {
+   "city": "BURBANK",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": null,
+   "stateOrCountry": "CA",
+   "stateOrCountryDescription": "CA",
+   "street1": "500 SOUTH BUENA VISTA STREET",
+   "street2": null,
+   "zipCode": "91521"
+  },
+  "mailing": {
+   "city": "BURBANK",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": 0,
+   "stateOrCountry": "CA",
+   "stateOrCountryDescription": "CA",
+   "street1": "500 SOUTH BUENA VISTA STREET",
+   "street2": null,
+   "zipCode": "91521"
+  }
+ },
+ "category": "Large accelerated filer",
+ "cik": "0001744489",
+ "description": "",
+ "ein": "830940635",
+ "entityType": "operating",
+ "exchanges": [
+  "NYSE"
+ ],
+ "filings": {
+  "files": [
+   {
+    "filingCount": 151,
+    "filingFrom": "2018-06-25",
+    "filingTo": "2020-01-22",
+    "name": "CIK0001744489-submissions-001.json"
+   }
+  ],
+  "recent": {
+   "acceptanceDateTime": [
+    "2026-10-02T22:03:49.000Z",
+    "2026-10-02T22:03:43.000Z",
+    "2026-10-02T22:03:35.000Z",
+    "2025-11-13T16:44:29.000Z",
+    "2024-11-14T16:46:46.000Z",
+    "2024-01-25T03:00:30.000Z",
+    "2023-11-22T03:04:04.000Z",
+    "2023-01-25T02:15:45.000Z",
+    "2022-11-30T03:03:15.000Z",
+    "2021-11-25T02:34:25.000Z",
+    "2020-11-26T02:59:53.000Z"
+   ],
+   "accessionNumber": [
+    "0001628280-26-064467",
+    "0001628280-26-064466",
+    "0001628280-26-064465",
+    "0001744489-25-000155",
+    "0001744489-24-000276",
+    "0001744489-24-000064",
+    "0001744489-23-000216",
+    "0001193125-23-014219",
+    "0001744489-22-000213",
+    "0001744489-21-000220",
+    "0001744489-20-000197"
+   ],
+   "act": [
+    "",
+    "",
+    "",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34"
+   ],
+   "core_type": [
+    "4",
+    "4",
+    "4",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL"
+   ],
+   "fileNumber": [
+    "",
+    "",
+    "",
+    "001-38842",
+    "001-38842",
+    "001-38842",
+    "001-38842",
+    "001-38842",
+    "001-38842",
+    "001-38842",
+    "001-38842"
+   ],
+   "filingDate": [
+    "2026-10-02",
+    "2026-10-02",
+    "2026-10-02",
+    "2025-11-13",
+    "2024-11-14",
+    "2024-01-24",
+    "2023-11-21",
+    "2023-01-24",
+    "2022-11-29",
+    "2021-11-24",
+    "2020-11-25"
+   ],
+   "filmNumber": [
+    "",
+    "",
+    "",
+    "251475282",
+    "241457012",
+    "24557290",
+    "231429053",
+    "23548305",
+    "221433462",
+    "211447310",
+    "201351521"
+   ],
+   "form": [
+    "4",
+    "4",
+    "4",
+    "10-K",
+    "10-K",
+    "10-K/A",
+    "10-K",
+    "10-K/A",
+    "10-K",
+    "10-K",
+    "10-K"
+   ],
+   "isInlineXBRL": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "isXBRL": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "items": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "primaryDocDescription": [
+    "FORM 4",
+    "FORM 4",
+    "FORM 4",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K/A",
+    "FORM 10-K",
+    "10-K/A",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K"
+   ],
+   "primaryDocument": [
+    "xslF345X06/wk-form4_1790964226.xml",
+    "xslF345X06/wk-form4_1790964220.xml",
+    "xslF345X06/wk-form4_1790964213.xml",
+    "dis-20250927.htm",
+    "dis-20240928.htm",
+    "dis-20230930.htm",
+    "dis-20230930.htm",
+    "d431948d10ka.htm",
+    "dis-20221001.htm",
+    "dis-20211002.htm",
+    "dis-20201003.htm"
+   ],
+   "reportDate": [
+    "2026-09-30",
+    "2026-09-30",
+    "2026-09-30",
+    "2025-09-27",
+    "2024-09-28",
+    "2023-09-30",
+    "2023-09-30",
+    "2022-10-01",
+    "2022-10-01",
+    "2021-10-02",
+    "2020-10-03"
+   ],
+   "size": [
+    5663,
+    6310,
+    7003,
+    22717450,
+    23543866,
+    5907160,
+    23405928,
+    4825360,
+    24809545,
+    25281807,
+    29365690
+   ]
+  }
+ },
+ "fiscalYearEnd": "1003",
+ "flags": "",
+ "formerNames": [
+  {
+   "from": "2018-06-25T04:00:00.000Z",
+   "name": "TWDC Holdco 613 Corp",
+   "to": "2018-06-28T04:00:00.000Z"
+  },
+  {
+   "from": "2018-06-27T04:00:00.000Z",
+   "name": "TWDC Holdco 613 Corp.",
+   "to": "2018-06-27T04:00:00.000Z"
+  }
+ ],
+ "insiderTransactionForIssuerExists": 1,
+ "insiderTransactionForOwnerExists": 1,
+ "investorWebsite": "",
+ "lei": null,
+ "name": "Walt Disney Co",
+ "ownerOrg": "07 Trade & Services",
+ "phone": "(818) 560-1000",
+ "sic": "7990",
+ "sicDescription": "Services-Miscellaneous Amusement & Recreation",
+ "stateOfIncorporation": "DE",
+ "stateOfIncorporationDescription": "DE",
+ "tickers": [
+  "DIS"
+ ],
+ "website": ""
+}

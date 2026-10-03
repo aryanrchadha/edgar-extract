@@ -1,0 +1,235 @@
+{
+ "addresses": {
+  "business": {
+   "city": "SAN FRANCISCO",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": null,
+   "stateOrCountry": "CA",
+   "stateOrCountryDescription": "CA",
+   "street1": "333 MARKET STREET",
+   "street2": null,
+   "zipCode": "94105"
+  },
+  "mailing": {
+   "city": "SAN FRANCISCO",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": 0,
+   "stateOrCountry": "CA",
+   "stateOrCountryDescription": "CA",
+   "street1": "333 MARKET STREET",
+   "street2": null,
+   "zipCode": "94105"
+  }
+ },
+ "category": "Large accelerated filer",
+ "cik": "0000072971",
+ "description": "",
+ "ein": "410449260",
+ "entityType": "operating",
+ "exchanges": [
+  "NYSE",
+  "NYSE",
+  "NYSE",
+  "NYSE",
+  "OTC",
+  "NYSE",
+  "NYSE",
+  "NYSE"
+ ],
+ "filings": {
+  "files": [
+   {
+    "filingCount": 2003,
+    "filingFrom": "2020-05-08",
+    "filingTo": "2025-10-01",
+    "name": "CIK0000072971-submissions-001.json"
+   },
+   {
+    "filingCount": 2000,
+    "filingFrom": "2018-11-20",
+    "filingTo": "2020-05-06",
+    "name": "CIK0000072971-submissions-002.json"
+   },
+   {
+    "filingCount": 2019,
+    "filingFrom": "2017-01-24",
+    "filingTo": "2018-11-18",
+    "name": "CIK0000072971-submissions-003.json"
+   },
+   {
+    "filingCount": 2004,
+    "filingFrom": "2014-06-10",
+    "filingTo": "2017-01-22",
+    "name": "CIK0000072971-submissions-004.json"
+   },
+   {
+    "filingCount": 2001,
+    "filingFrom": "2011-12-02",
+    "filingTo": "2014-06-08",
+    "name": "CIK0000072971-submissions-005.json"
+   },
+   {
+    "filingCount": 2032,
+    "filingFrom": "2009-05-11",
+    "filingTo": "2011-11-30",
+    "name": "CIK0000072971-submissions-006.json"
+   },
+   {
+    "filingCount": 2004,
+    "filingFrom": "2006-07-18",
+    "filingTo": "2009-05-09",
+    "name": "CIK0000072971-submissions-007.json"
+   },
+   {
+    "filingCount": 2000,
+    "filingFrom": "1995-12-14",
+    "filingTo": "2006-07-16",
+    "name": "CIK0000072971-submissions-008.json"
+   },
+   {
+    "filingCount": 256,
+    "filingFrom": "1994-01-12",
+    "filingTo": "1995-12-12",
+    "name": "CIK0000072971-submissions-009.json"
+   }
+  ],
+  "recent": {
+   "acceptanceDateTime": [
+    "2026-10-03T01:11:00.000Z",
+    "2026-10-02T19:16:20.000Z",
+    "2026-10-02T18:45:10.000Z",
+    "2026-02-25T02:46:31.000Z"
+   ],
+   "accessionNumber": [
+    "0001839882-26-049462",
+    "0001839882-26-049152",
+    "0001839882-26-049126",
+    "0000072971-26-000133"
+   ],
+   "act": [
+    "33",
+    "33",
+    "33",
+    "34"
+   ],
+   "core_type": [
+    "424B2",
+    "424B2",
+    "424B2",
+    "XBRL"
+   ],
+   "fileNumber": [
+    "333-292881",
+    "333-292881",
+    "333-292881",
+    "001-02979"
+   ],
+   "filingDate": [
+    "2026-10-02",
+    "2026-10-02",
+    "2026-10-02",
+    "2026-02-24"
+   ],
+   "filmNumber": [
+    "261437806",
+    "261434150",
+    "261434019",
+    "26672509"
+   ],
+   "form": [
+    "424B2",
+    "424B2",
+    "424B2",
+    "10-K"
+   ],
+   "isInlineXBRL": [
+    0,
+    1,
+    1,
+    1
+   ],
+   "isXBRL": [
+    0,
+    1,
+    1,
+    1
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    null
+   ],
+   "items": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "primaryDocDescription": [
+    "PRELIMINARY PRICING SUPPLEMENT NO. 269",
+    "PRICING SUPPLEMENT NO. 197",
+    "PRICING SUPPLEMENT NO. 240",
+    "FORM 10-K"
+   ],
+   "primaryDocument": [
+    "r10561wfc_424b2-33531.htm",
+    "r10159wfc_424b2-33395.htm",
+    "r10438wfc_424b2-33296.htm",
+    "wfc-20251231_d2.htm"
+   ],
+   "reportDate": [
+    "",
+    "",
+    "",
+    "2025-12-31"
+   ],
+   "size": [
+    626922,
+    703066,
+    2311010,
+    57600360
+   ]
+  }
+ },
+ "fiscalYearEnd": "1231",
+ "flags": "",
+ "formerNames": [
+  {
+   "from": "1998-11-30T05:00:00.000Z",
+   "name": "WELLS FARGO & CO/MN",
+   "to": "2012-04-10T04:00:00.000Z"
+  },
+  {
+   "from": "1994-09-12T04:00:00.000Z",
+   "name": "NORWEST CORP",
+   "to": "1998-10-21T04:00:00.000Z"
+  }
+ ],
+ "insiderTransactionForIssuerExists": 1,
+ "insiderTransactionForOwnerExists": 1,
+ "investorWebsite": "",
+ "lei": null,
+ "name": "WELLS FARGO & COMPANY/MN",
+ "ownerOrg": "02 Finance",
+ "phone": "8008693557",
+ "sic": "6021",
+ "sicDescription": "National Commercial Banks",
+ "stateOfIncorporation": "DE",
+ "stateOfIncorporationDescription": "DE",
+ "tickers": [
+  "WFC",
+  "WFC-PY",
+  "WFC-PL",
+  "WFC-PC",
+  "WFCNP",
+  "WFC-PA",
+  "WFC-PD",
+  "WFC-PZ"
+ ],
+ "website": ""
+}

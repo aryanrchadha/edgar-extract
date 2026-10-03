@@ -1,0 +1,266 @@
+{
+ "addresses": {
+  "business": {
+   "city": "SPRING",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": null,
+   "stateOrCountry": "TX",
+   "stateOrCountryDescription": "TX",
+   "street1": "22777 SPRINGWOODS VILLAGE PARKWAY",
+   "street2": null,
+   "zipCode": "77389-1425"
+  },
+  "mailing": {
+   "city": "SPRING",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": 0,
+   "stateOrCountry": "TX",
+   "stateOrCountryDescription": "TX",
+   "street1": "22777 SPRINGWOODS VILLAGE PARKWAY",
+   "street2": null,
+   "zipCode": "77389-1425"
+  }
+ },
+ "category": "Large accelerated filer",
+ "cik": "0000034088",
+ "description": "",
+ "ein": "135409005",
+ "entityType": "operating",
+ "exchanges": [],
+ "filings": {
+  "files": [
+   {
+    "filingCount": 2002,
+    "filingFrom": "2005-10-04",
+    "filingTo": "2020-01-01",
+    "name": "CIK0000034088-submissions-001.json"
+   },
+   {
+    "filingCount": 554,
+    "filingFrom": "1994-03-04",
+    "filingTo": "2005-10-02",
+    "name": "CIK0000034088-submissions-002.json"
+   }
+  ],
+  "recent": {
+   "acceptanceDateTime": [
+    "2026-09-25T01:10:19.000Z",
+    "2026-09-23T21:17:57.000Z",
+    "2026-09-21T13:07:48.000Z",
+    "2026-02-18T21:06:52.000Z",
+    "2025-02-19T21:39:37.000Z",
+    "2024-02-28T21:37:18.000Z",
+    "2023-02-22T21:37:14.000Z",
+    "2022-02-23T21:11:16.000Z",
+    "2021-02-24T22:01:02.000Z",
+    "2020-02-26T21:15:19.000Z"
+   ],
+   "accessionNumber": [
+    "0001193125-26-401391",
+    "0001193125-26-399637",
+    "0001193125-26-396148",
+    "0000034088-26-000045",
+    "0000034088-25-000010",
+    "0000034088-24-000018",
+    "0000034088-23-000020",
+    "0000034088-22-000011",
+    "0000034088-21-000012",
+    "0000034088-20-000016"
+   ],
+   "act": [
+    "33",
+    "34",
+    "33",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34"
+   ],
+   "core_type": [
+    "424B2",
+    "FWP",
+    "424B3",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL"
+   ],
+   "fileNumber": [
+    "333-293558",
+    "333-293558",
+    "333-293558",
+    "001-02256",
+    "001-02256",
+    "001-02256",
+    "001-02256",
+    "001-02256",
+    "001-02256",
+    "001-02256"
+   ],
+   "filingDate": [
+    "2026-09-25",
+    "2026-09-23",
+    "2026-09-21",
+    "2026-02-18",
+    "2025-02-19",
+    "2024-02-28",
+    "2023-02-22",
+    "2022-02-23",
+    "2021-02-24",
+    "2020-02-26"
+   ],
+   "filmNumber": [
+    "261406038",
+    "261401690",
+    "261392401",
+    "26648262",
+    "25641012",
+    "24696144",
+    "23653785",
+    "22663708",
+    "21674541",
+    "20655849"
+   ],
+   "form": [
+    "424B2",
+    "FWP",
+    "424B3",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K"
+   ],
+   "isInlineXBRL": [
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "isXBRL": [
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "items": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "primaryDocDescription": [
+    "424B2",
+    "FWP",
+    "424B3",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K",
+    "FORM 10-K"
+   ],
+   "primaryDocument": [
+    "d137820d424b2.htm",
+    "d188276dfwp.htm",
+    "d137820d424b3.htm",
+    "xom-20251231.htm",
+    "xom-20241231.htm",
+    "xom-20231231.htm",
+    "xom-20221231.htm",
+    "xom-20211231.htm",
+    "xom-20201231.htm",
+    "xom10k2019.htm"
+   ],
+   "reportDate": [
+    "",
+    "",
+    "",
+    "2025-12-31",
+    "2024-12-31",
+    "2023-12-31",
+    "2022-12-31",
+    "2021-12-31",
+    "2020-12-31",
+    "2019-12-31"
+   ],
+   "size": [
+    671354,
+    33470,
+    529180,
+    26924307,
+    26982712,
+    25901276,
+    27495176,
+    23981301,
+    21572229,
+    31993281
+   ]
+  }
+ },
+ "fiscalYearEnd": "1231",
+ "flags": "",
+ "formerNames": [
+  {
+   "from": "1994-05-11T04:00:00.000Z",
+   "name": "EXXON CORP",
+   "to": "1999-11-30T05:00:00.000Z"
+  }
+ ],
+ "insiderTransactionForIssuerExists": 1,
+ "insiderTransactionForOwnerExists": 1,
+ "investorWebsite": "",
+ "lei": null,
+ "name": "EXXON MOBIL CORP",
+ "ownerOrg": "01 Energy & Transportation",
+ "phone": "9729406000",
+ "sic": "2911",
+ "sicDescription": "Petroleum Refining",
+ "stateOfIncorporation": "NJ",
+ "stateOfIncorporationDescription": "NJ",
+ "tickers": [],
+ "website": ""
+}

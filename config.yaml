@@ -1,20 +1,27 @@
 # edgar-extract configuration.
-# Paths are relative to the directory you run the CLI from.
+# Relative paths are resolved against the directory containing this file.
+# Any value can be overridden by environment variables, e.g.
+#   EDGAR_EXTRACT_SEC__CONTACT_EMAIL=someone@example.edu
 
 sec:
-  # SEC fair-access policy requires a descriptive User-Agent with a contact email.
-  # Can also be set with the EDGAR_EXTRACT_EMAIL environment variable.
+  # SEC fair-access policy: declare who you are. Sent as "User-Agent: <app_name> <contact_email>".
   app_name: "edgar-extract research"
   contact_email: ""
-  # SEC's published limit is 10 requests/second; we stay under 8.
-  max_requests_per_second: 8.0
+  # SEC's ceiling is 10 req/s. Config validation rejects anything above 8.
+  max_requests_per_second: 7.0
+  timeout_seconds: 30
+  max_retries: 5
 
 universe:
-  # Default universe: large caps across sectors. GE (GE HealthCare and GE Vernova
-  # spin-offs) and INTC (2024 segment reorganization) are included because later 10-Ks
-  # likely recast earlier periods. Which companies actually have changed prior-period
-  # values is measured from the data in M6, not assumed.
-  # EDIT BEFORE THE FIRST FULL DOWNLOAD.
+  # PROPOSED DEFAULT, REVIEW BEFORE THE FIRST FULL FILING DOWNLOAD.
+  # Why these names:
+  #   - large caps across sectors so section layouts and revenue concepts vary;
+  #   - JPM, WFC (banks): no plain "Revenues" tag, which exercises NO_XBRL_COUNTERPART;
+  #     WFC has historically incorporated MD&A by reference to an Exhibit 13 annual report,
+  #     which exercises section_missing_by_reference;
+  #   - JNJ (Kenvue separation, 2023) and GE (GE HealthCare 2023, GE Vernova 2024 spin-offs):
+  #     later 10-Ks recast earlier periods, which exercises PIT versioning. Whether any
+  #     company has changed prior-period values is measured from data in M6, not assumed.
   tickers:
     - AAPL
     - MSFT
@@ -23,27 +30,32 @@ universe:
     - META
     - NVDA
     - JPM
+    - WFC
     - JNJ
-    - PG
+    - PFE
     - XOM
     - WMT
+    - PG
     - KO
-    - PFE
     - INTC
     - GE
     - BA
     - CAT
     - DIS
-    - NKE
     - KHC
-  # Optional explicit CIK overrides (ticker -> CIK) if the SEC ticker file is ambiguous.
-  cik_overrides: {}
-  # Optional SIC filter. Entries are codes ("3571") or inclusive ranges ("6000-6999").
-  # Empty include list means "include everything".
+  # Optional ticker -> CIK overrides if SEC's ticker file is wrong or ambiguous.
+  # XOM: on 2026-07-01 Exxon Mobil reorganized under a new holding company
+  # (ExxonMobil Holdings Corp, CIK 2115436, filed an 8-K12B). SEC's ticker file now maps
+  # XOM to the new CIK, which has no 10-K yet. The FY2021-FY2025 10-Ks are under the
+  # predecessor, Exxon Mobil Corp, CIK 34088.
+  cik_overrides:
+    XOM: 34088
+  # Optional SIC filter: codes ("3571") or inclusive ranges ("6000-6999").
+  # Empty sic_include means "include everything".
   sic_include: []
   sic_exclude: []
 
-# Number of most recent fiscal years of 10-K filings per company.
+# Most recent fiscal years of original 10-K filings per company.
 years: 5
 
 paths:

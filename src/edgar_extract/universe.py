@@ -1,40 +1,54 @@
-"""Universe construction: ticker -> CIK, optional SIC filter, and the 10-K accession list."""
+"""Universe construction: ticker -> CIK, optional SIC filter, 10-K accession list.
+
+For each company we select the most recent ``years`` fiscal years that have an original
+annual report (``10-K`` or ``10-KT``). Amendments for those fiscal years are kept and
+flagged with ``is_amendment``; they never count toward the year total.
+
+Fiscal year convention: ``year(reportDate)``, minus one when the period ends in the first
+seven days of January (52/53-week years ending on the Saturday nearest Dec 31). This is a
+documented convention, not each company's own label.
+"""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator
+from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
 
 import pandas as pd
 
-from edgar_extract.config import Settings, normalize_ticker, sic_matches
-from edgar_extract.edgar_client import EdgarClient, EdgarError, filing_document_url
+from edgar_extract.config import SicFilter
+from edgar_extract.edgar_client import (
+    EdgarClient,
+    EdgarError,
+    EdgarNotFoundError,
+    archive_url,
+)
 from edgar_extract.skiplog import SkipLog
 
 log = logging.getLogger(__name__)
 
-ANNUAL_FORMS = frozenset({"10-K", "10-K405", "10-KT"})
-AMENDMENT_FORMS = frozenset({"10-K/A", "10-K405/A", "10-KT/A"})
+STAGE = "universe"
+ORIGINAL_FORMS = frozenset({"10-K", "10-KT"})
+AMENDMENT_FORMS = frozenset({"10-K/A", "10-KT/A"})
+ANNUAL_FORMS = ORIGINAL_FORMS | AMENDMENT_FORMS
 
 UNIVERSE_COLUMNS = [
     "ticker",
     "cik",
     "company_name",
     "sic",
-    "sic_description",
-    "fiscal_year_end",
     "fiscal_year",
     "form",
     "is_amendment",
     "accession",
     "filing_date",
+    "report_date",
     "acceptance_datetime",
-    "period_end",
     "primary_document",
     "primary_doc_url",
-    "is_xbrl",
     "is_inline_xbrl",
 ]
 
@@ -44,178 +58,313 @@ class Company:
     ticker: str
     cik: int
     name: str
+    sic: int | None
+    sic_description: str
+    fiscal_year_end: str | None
 
 
-def build_ticker_map(raw: dict[str, Any]) -> dict[str, Company]:
-    """Parse SEC ``company_tickers.json`` ({"0": {"cik_str", "ticker", "title"}, ...}).
-
-    When a ticker appears more than once, the first entry wins (SEC orders the file by
-    market value), and the collision is logged.
-    """
-    out: dict[str, Company] = {}
-    for row in raw.values():
-        t = normalize_ticker(str(row["ticker"]))
-        if t in out:
-            log.debug("duplicate ticker %s in SEC map; keeping CIK %s", t, out[t].cik)
-            continue
-        out[t] = Company(ticker=t, cik=int(row["cik_str"]), name=str(row["title"]))
-    return out
-
-
-def resolve_companies(
-    settings: Settings, ticker_map: dict[str, Company], skips: SkipLog
-) -> list[Company]:
-    companies: list[Company] = []
-    for t in settings.universe.tickers:
-        if t in settings.universe.cik_overrides:
-            name = ticker_map[t].name if t in ticker_map else ""
-            companies.append(Company(t, settings.universe.cik_overrides[t], name))
-        elif t in ticker_map:
-            companies.append(ticker_map[t])
-        else:
-            skips.add("universe", t, "ticker_not_in_sec_map")
-    return companies
+@dataclass(frozen=True)
+class FilingRef:
+    ticker: str
+    cik: int
+    company_name: str
+    sic: int | None
+    fiscal_year: int
+    form: str
+    is_amendment: bool
+    accession: str
+    filing_date: date
+    report_date: date
+    acceptance_datetime: str
+    primary_document: str
+    primary_doc_url: str
+    is_inline_xbrl: bool
 
 
 def fiscal_year_from_period_end(period_end: date) -> int:
-    """Label a fiscal year by the calendar year of its period end.
-
-    Exception: a 52/53-week year ending in the first 7 days of January belongs to the
-    prior year (e.g. a year ending 2021-01-02 is fiscal 2020). Companies whose fiscal
-    year ends in late January or February label years inconsistently (Walmart's year
-    ending 2024-01-31 is "fiscal 2024"; Target's ending 2024-02-03 is "fiscal 2023");
-    this rule follows the period-end year and is used only as a display label. The PIT
-    database keys on ``period_end``, never on this label.
-    """
     if period_end.month == 1 and period_end.day <= 7:
         return period_end.year - 1
     return period_end.year
 
 
-def filings_frame(block: dict[str, Any]) -> pd.DataFrame:
-    """Convert a columnar submissions block (``filings.recent`` or a page) to a DataFrame."""
-    if not block or "accessionNumber" not in block:
-        return pd.DataFrame()
-    n = len(block["accessionNumber"])
-    cols = {k: v for k, v in block.items() if isinstance(v, list) and len(v) == n}
-    return pd.DataFrame(cols)
+def load_ticker_map(client: EdgarClient) -> dict[str, int]:
+    """Map upper-case ticker -> CIK from SEC's ``company_tickers.json``."""
+    mapping: dict[str, int] = {}
+    for row in client.company_tickers().values():
+        ticker = str(row["ticker"]).upper()
+        # The file lists a CIK once per ticker; keep the first if a ticker repeats.
+        mapping.setdefault(ticker, int(row["cik_str"]))
+    return mapping
 
 
-def all_filings(client: EdgarClient, submissions: dict[str, Any], need_annual: int) -> pd.DataFrame:
-    """Recent filings, extended with older pages until ``need_annual`` 10-Ks are found.
+def resolve_ciks(
+    tickers: Iterable[str],
+    ticker_map: dict[str, int],
+    overrides: dict[str, int],
+    skiplog: SkipLog,
+) -> list[tuple[str, int]]:
+    """Resolve tickers to CIKs, de-duplicating share classes that map to one CIK."""
+    resolved: list[tuple[str, int]] = []
+    seen: dict[int, str] = {}
+    for ticker in tickers:
+        cik = overrides.get(ticker, ticker_map.get(ticker))
+        if cik is None:
+            skiplog.record(STAGE, "ticker not found in SEC company_tickers.json", ticker=ticker)
+            continue
+        if cik in seen:
+            skiplog.record(
+                STAGE,
+                "duplicate CIK (another ticker for the same registrant is already in the universe)",
+                ticker=ticker,
+                cik=cik,
+                detail=f"kept {seen[cik]}",
+            )
+            continue
+        seen[cik] = ticker
+        resolved.append((ticker, cik))
+    return resolved
 
-    ``filings.recent`` holds at least one year or 1,000 filings, so prolific filers
-    (banks issuing 424B notes) need the paginated history to reach five 10-Ks.
-    """
-    frames = [filings_frame(submissions.get("filings", {}).get("recent", {}))]
 
-    def annual_count() -> int:
-        df = pd.concat(frames, ignore_index=True)
-        return 0 if df.empty else int(df["form"].isin(ANNUAL_FORMS).sum())
-
-    pages = sorted(
-        submissions.get("filings", {}).get("files", []),
-        key=lambda f: f.get("filingTo", ""),
-        reverse=True,
+def company_from_submissions(ticker: str, cik: int, sub: dict[str, Any]) -> Company:
+    sic_raw = str(sub.get("sic") or "").strip()
+    return Company(
+        ticker=ticker,
+        cik=cik,
+        name=str(sub.get("name") or ""),
+        sic=int(sic_raw) if sic_raw.isdigit() else None,
+        sic_description=str(sub.get("sicDescription") or ""),
+        fiscal_year_end=sub.get("fiscalYearEnd"),
     )
-    for page in pages:
-        if annual_count() >= need_annual:
+
+
+def successor_hint(sub: dict[str, Any]) -> str | None:
+    """Explain a missing 10-K history when the registrant is a successor issuer.
+
+    After a holding-company reorganization the ticker moves to a new CIK whose history
+    starts with an 8-K12B; the historical 10-Ks stay under the predecessor's CIK.
+    """
+    for row in _columnar_rows(sub["filings"]["recent"]):
+        if row.get("form") == "8-K12B":
+            return (
+                f"registrant became a successor issuer (8-K12B filed {row.get('filingDate')}); "
+                "its earlier 10-Ks are under the predecessor CIK. "
+                "Add the predecessor to universe.cik_overrides."
+            )
+    return None
+
+
+def _columnar_rows(block: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Turn SEC's columnar arrays (one list per field) into row dicts."""
+    keys = [k for k, v in block.items() if isinstance(v, list)]
+    if not keys:
+        return
+    n = len(block[keys[0]])
+    for k in keys:
+        if len(block[k]) != n:
+            raise EdgarError(f"submissions column {k!r} has {len(block[k])} rows, expected {n}")
+    for i in range(n):
+        yield {k: block[k][i] for k in keys}
+
+
+def _parse_date(value: Any) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _distinct_original_years(rows: list[dict[str, Any]]) -> set[int]:
+    years: set[int] = set()
+    for r in rows:
+        if r.get("form") in ORIGINAL_FORMS and (d := _parse_date(r.get("reportDate"))):
+            years.add(fiscal_year_from_period_end(d))
+    return years
+
+
+def annual_report_rows(
+    client: EdgarClient, sub: dict[str, Any], years: int, skiplog: SkipLog, ticker: str
+) -> list[dict[str, Any]]:
+    """All 10-K family rows, pulling older paginated history only when needed.
+
+    Pages are fetched in order until we have ``years + 1`` distinct original fiscal years
+    (one extra so an amendment for the oldest selected year is not cut off at a page
+    boundary) or the pages run out.
+    """
+    rows = [r for r in _columnar_rows(sub["filings"]["recent"]) if r.get("form") in ANNUAL_FORMS]
+    for page in sub["filings"].get("files", []):
+        if len(_distinct_original_years(rows)) > years:
             break
-        frames.append(filings_frame(client.submissions_page(page["name"])))
-    df = pd.concat(frames, ignore_index=True)
-    return df.drop_duplicates("accessionNumber") if not df.empty else df
+        name = page.get("name")
+        try:
+            data = client.submissions_page(name)
+        except EdgarNotFoundError:
+            skiplog.record(
+                STAGE, "submissions history page missing (HTTP 404)", ticker=ticker, detail=name
+            )
+            continue
+        rows.extend(r for r in _columnar_rows(data) if r.get("form") in ANNUAL_FORMS)
+    return rows
 
 
-def select_annual_filings(
-    filings: pd.DataFrame, years: int, ticker: str, skips: SkipLog
-) -> pd.DataFrame:
-    """Pick original 10-Ks for the latest ``years`` fiscal years, plus their amendments."""
-    if filings.empty:
-        skips.add("universe", ticker, "no_filings_in_submissions")
-        return pd.DataFrame()
-    df = filings[filings["form"].isin(ANNUAL_FORMS | AMENDMENT_FORMS)].copy()
-    if df.empty:
-        skips.add("universe", ticker, "no_10k_filings")
-        return df
+def select_filings(
+    company: Company, rows: list[dict[str, Any]], years: int, skiplog: SkipLog
+) -> list[FilingRef]:
+    """Pick the latest ``years`` fiscal years of original 10-Ks plus their amendments."""
+    parsed: list[tuple[dict[str, Any], date, date]] = []
+    for r in rows:
+        acc = r.get("accessionNumber")
+        report = _parse_date(r.get("reportDate"))
+        filed = _parse_date(r.get("filingDate"))
+        if report is None or filed is None:
+            skiplog.record(
+                STAGE,
+                "annual report without a parseable reportDate/filingDate",
+                ticker=company.ticker,
+                cik=company.cik,
+                accession=acc,
+                detail=f"form={r.get('form')} reportDate={r.get('reportDate')!r}",
+            )
+            continue
+        if not r.get("primaryDocument"):
+            skiplog.record(
+                STAGE,
+                "annual report without a primaryDocument",
+                ticker=company.ticker,
+                cik=company.cik,
+                accession=acc,
+            )
+            continue
+        parsed.append((r, report, filed))
 
-    df["period_end"] = pd.to_datetime(df["reportDate"], errors="coerce").dt.date
-    missing = df["period_end"].isna()
-    for acc in df.loc[missing, "accessionNumber"]:
-        skips.add("universe", ticker, "missing_report_date", accession=acc)
-    df = df[~missing].copy()
-    df["fiscal_year"] = df["period_end"].map(fiscal_year_from_period_end)
-    df["is_amendment"] = df["form"].isin(AMENDMENT_FORMS)
+    originals: dict[int, tuple[dict[str, Any], date, date]] = {}
+    for r, report, filed in sorted(parsed, key=lambda t: (t[2], t[0]["accessionNumber"])):
+        if r["form"] not in ORIGINAL_FORMS:
+            continue
+        fy = fiscal_year_from_period_end(report)
+        if fy in originals:
+            skiplog.record(
+                STAGE,
+                "second original annual report for the same fiscal year (kept the earliest filed)",
+                ticker=company.ticker,
+                cik=company.cik,
+                accession=r["accessionNumber"],
+                detail=f"fiscal_year={fy} kept={originals[fy][0]['accessionNumber']}",
+            )
+            continue
+        originals[fy] = (r, report, filed)
 
-    originals = df[~df["is_amendment"]].sort_values("filingDate")
-    # If two originals cover the same fiscal year (e.g. a 10-KT transition report), keep
-    # the latest-filed and log the other.
-    dup = originals.duplicated("fiscal_year", keep="last")
-    dropped = set(originals.loc[dup, "accessionNumber"])
-    for acc in sorted(dropped):
-        skips.add("universe", ticker, "duplicate_fiscal_year_original", accession=acc)
-    keep_years = set(sorted(originals.loc[~dup, "fiscal_year"], reverse=True)[:years])
-    if len(keep_years) < years:
-        skips.add(
-            "universe",
-            ticker,
-            "fewer_fiscal_years_than_requested",
-            detail=f"found {len(keep_years)} of {years}",
+    selected_years = sorted(originals, reverse=True)[:years]
+    if len(selected_years) < years:
+        skiplog.record(
+            STAGE,
+            f"fewer than {years} fiscal years of original 10-K filings available",
+            ticker=company.ticker,
+            cik=company.cik,
+            detail=f"found {sorted(selected_years)}",
         )
-    return df[df["fiscal_year"].isin(keep_years) & ~df["accessionNumber"].isin(dropped)]
+
+    chosen: list[tuple[dict[str, Any], date, date, int]] = [
+        (*originals[fy], fy) for fy in selected_years
+    ]
+    oldest_original_filed = min((originals[fy][2] for fy in selected_years), default=None)
+    for r, report, filed in parsed:
+        if r["form"] not in AMENDMENT_FORMS:
+            continue
+        fy = fiscal_year_from_period_end(report)
+        if fy in selected_years:
+            chosen.append((r, report, filed, fy))
+        elif oldest_original_filed is not None and filed >= oldest_original_filed:
+            skiplog.record(
+                STAGE,
+                "10-K/A for a fiscal year outside the selected window",
+                ticker=company.ticker,
+                cik=company.cik,
+                accession=r["accessionNumber"],
+                detail=f"fiscal_year={fy}",
+            )
+
+    refs = [
+        FilingRef(
+            ticker=company.ticker,
+            cik=company.cik,
+            company_name=company.name,
+            sic=company.sic,
+            fiscal_year=fy,
+            form=r["form"],
+            is_amendment=r["form"] in AMENDMENT_FORMS,
+            accession=r["accessionNumber"],
+            filing_date=filed,
+            report_date=report,
+            acceptance_datetime=str(r.get("acceptanceDateTime") or ""),
+            primary_document=r["primaryDocument"],
+            primary_doc_url=archive_url(company.cik, r["accessionNumber"], r["primaryDocument"]),
+            is_inline_xbrl=bool(r.get("isInlineXBRL")),
+        )
+        for r, report, filed, fy in chosen
+    ]
+    return sorted(refs, key=lambda f: (f.fiscal_year, f.filing_date, f.accession), reverse=True)
 
 
 def build_universe(
-    settings: Settings, client: EdgarClient, skips: SkipLog, *, refresh: bool = False
+    client: EdgarClient,
+    tickers: Iterable[str],
+    *,
+    years: int,
+    sic_filter: SicFilter,
+    cik_overrides: dict[str, int],
+    skiplog: SkipLog,
 ) -> pd.DataFrame:
-    ticker_map = build_ticker_map(client.company_tickers(refresh=refresh))
-    rows: list[pd.DataFrame] = []
-    for co in resolve_companies(settings, ticker_map, skips):
+    """Resolve tickers, apply the SIC filter, and list the 10-K filings to process."""
+    ticker_map = load_ticker_map(client)
+    refs: list[FilingRef] = []
+    for ticker, cik in resolve_ciks(tickers, ticker_map, cik_overrides, skiplog):
         try:
-            subs = client.submissions(co.cik, refresh=refresh)
-        except EdgarError as exc:
-            skips.add("universe", co.ticker, "submissions_fetch_failed", detail=str(exc))
+            sub = client.submissions(cik)
+        except EdgarNotFoundError:
+            skiplog.record(STAGE, "submissions endpoint returned 404", ticker=ticker, cik=cik)
             continue
-        sic_raw = subs.get("sic")
-        sic = int(sic_raw) if str(sic_raw or "").isdigit() else None
-        if not sic_matches(sic, settings.universe.sic_include, settings.universe.sic_exclude):
-            skips.add("universe", co.ticker, "sic_filtered", detail=f"sic={sic}")
+        company = company_from_submissions(ticker, cik, sub)
+        if (reason := sic_filter.reason_rejected(company.sic)) is not None:
+            skiplog.record(STAGE, "excluded by SIC filter", ticker=ticker, cik=cik, detail=reason)
             continue
-        try:
-            filings = all_filings(client, subs, need_annual=settings.years)
-        except EdgarError as exc:
-            skips.add("universe", co.ticker, "submissions_page_fetch_failed", detail=str(exc))
+        rows = annual_report_rows(client, sub, years, skiplog, ticker)
+        if not rows:
+            skiplog.record(
+                STAGE,
+                "no 10-K filings in submissions history",
+                ticker=ticker,
+                cik=cik,
+                detail=successor_hint(sub),
+            )
             continue
-        sel = select_annual_filings(filings, settings.years, co.ticker, skips)
-        if sel.empty:
-            continue
-        out = pd.DataFrame(
-            {
-                "ticker": co.ticker,
-                "cik": co.cik,
-                "company_name": subs.get("name") or co.name,
-                "sic": sic,
-                "sic_description": subs.get("sicDescription", ""),
-                "fiscal_year_end": subs.get("fiscalYearEnd", ""),
-                "fiscal_year": sel["fiscal_year"].astype(int),
-                "form": sel["form"],
-                "is_amendment": sel["is_amendment"].astype(bool),
-                "accession": sel["accessionNumber"],
-                "filing_date": pd.to_datetime(sel["filingDate"]).dt.date,
-                "acceptance_datetime": sel.get("acceptanceDateTime", pd.Series(dtype=str)),
-                "period_end": sel["period_end"],
-                "primary_document": sel["primaryDocument"],
-                "primary_doc_url": [
-                    filing_document_url(co.cik, a, d)
-                    for a, d in zip(sel["accessionNumber"], sel["primaryDocument"], strict=True)
-                ],
-                "is_xbrl": sel.get("isXBRL", pd.Series(0, index=sel.index)).astype(bool),
-                "is_inline_xbrl": sel.get("isInlineXBRL", pd.Series(0, index=sel.index)).astype(
-                    bool
-                ),
-            }
-        )
-        rows.append(out)
-    if not rows:
-        return pd.DataFrame(columns=UNIVERSE_COLUMNS)
-    uni = pd.concat(rows, ignore_index=True)[UNIVERSE_COLUMNS]
-    return uni.sort_values(["ticker", "fiscal_year", "filing_date"]).reset_index(drop=True)
+        selected = select_filings(company, rows, years, skiplog)
+        refs.extend(selected)
+        log.info("%s (CIK %s): %d annual filings selected", ticker, cik, len(selected))
+    return universe_frame(refs)
+
+
+def universe_frame(refs: list[FilingRef]) -> pd.DataFrame:
+    df = pd.DataFrame([asdict(r) for r in refs], columns=UNIVERSE_COLUMNS)
+    if not df.empty:
+        df["filing_date"] = pd.to_datetime(df["filing_date"])
+        df["report_date"] = pd.to_datetime(df["report_date"])
+    return df.astype(
+        {
+            "ticker": "string",
+            "cik": "int64",
+            "company_name": "string",
+            "sic": "Int64",
+            "fiscal_year": "int64",
+            "form": "string",
+            "is_amendment": "bool",
+            "accession": "string",
+            "filing_date": "datetime64[ns]",
+            "report_date": "datetime64[ns]",
+            "acceptance_datetime": "string",
+            "primary_document": "string",
+            "primary_doc_url": "string",
+            "is_inline_xbrl": "bool",
+        }
+    )

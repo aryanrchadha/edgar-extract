@@ -1,0 +1,286 @@
+{
+ "addresses": {
+  "business": {
+   "city": "NEW BRUNSWICK",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": null,
+   "stateOrCountry": "NJ",
+   "stateOrCountryDescription": "NJ",
+   "street1": "ONE JOHNSON & JOHNSON PLZ",
+   "street2": null,
+   "zipCode": "08933"
+  },
+  "mailing": {
+   "city": "NEW BRUNSWICK",
+   "country": null,
+   "countryCode": null,
+   "foreignStateTerritory": null,
+   "isForeignLocation": 0,
+   "stateOrCountry": "NJ",
+   "stateOrCountryDescription": "NJ",
+   "street1": "ONE JOHNSON & JOHNSON PLZ",
+   "street2": null,
+   "zipCode": "08933"
+  }
+ },
+ "category": "Large accelerated filer",
+ "cik": "0000200406",
+ "description": "",
+ "ein": "221024240",
+ "entityType": "operating",
+ "exchanges": [
+  "NYSE"
+ ],
+ "filings": {
+  "files": [
+   {
+    "filingCount": 2007,
+    "filingFrom": "2003-07-02",
+    "filingTo": "2018-07-09",
+    "name": "CIK0000200406-submissions-001.json"
+   },
+   {
+    "filingCount": 360,
+    "filingFrom": "1994-03-10",
+    "filingTo": "2003-06-30",
+    "name": "CIK0000200406-submissions-002.json"
+   }
+  ],
+  "recent": {
+   "acceptanceDateTime": [
+    "2026-09-11T00:51:17.000Z",
+    "2026-09-11T00:50:45.000Z",
+    "2026-09-11T00:50:12.000Z",
+    "2026-02-11T21:06:11.000Z",
+    "2025-02-13T21:07:39.000Z",
+    "2024-02-16T21:12:22.000Z",
+    "2023-02-16T21:01:53.000Z",
+    "2022-02-17T21:06:50.000Z",
+    "2021-02-22T21:36:14.000Z",
+    "2020-02-18T21:34:21.000Z",
+    "2019-02-20T21:40:34.000Z"
+   ],
+   "accessionNumber": [
+    "0000200406-26-000185",
+    "0000200406-26-000184",
+    "0000200406-26-000183",
+    "0000200406-26-000016",
+    "0000200406-25-000038",
+    "0000200406-24-000013",
+    "0000200406-23-000016",
+    "0000200406-22-000022",
+    "0000200406-21-000008",
+    "0000200406-20-000010",
+    "0000200406-19-000009"
+   ],
+   "act": [
+    "",
+    "",
+    "",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34",
+    "34"
+   ],
+   "core_type": [
+    "4",
+    "4",
+    "4",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "XBRL",
+    "10-K"
+   ],
+   "fileNumber": [
+    "",
+    "",
+    "",
+    "001-03215",
+    "001-03215",
+    "001-03215",
+    "001-03215",
+    "001-03215",
+    "001-03215",
+    "001-03215",
+    "001-03215"
+   ],
+   "filingDate": [
+    "2026-09-10",
+    "2026-09-10",
+    "2026-09-10",
+    "2026-02-11",
+    "2025-02-13",
+    "2024-02-16",
+    "2023-02-16",
+    "2022-02-17",
+    "2021-02-22",
+    "2020-02-18",
+    "2019-02-20"
+   ],
+   "filmNumber": [
+    "",
+    "",
+    "",
+    "26620731",
+    "25620252",
+    "24648459",
+    "23638460",
+    "22648093",
+    "21660851",
+    "20625814",
+    "19618842"
+   ],
+   "form": [
+    "4",
+    "4",
+    "4",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K"
+   ],
+   "isInlineXBRL": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0
+   ],
+   "isXBRL": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "isXBRLNumeric": [
+    0,
+    0,
+    0,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "items": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "primaryDocDescription": [
+    "FORM 4",
+    "FORM 4",
+    "FORM 4",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K",
+    "10-K 2019",
+    "10-K 2018"
+   ],
+   "primaryDocument": [
+    "xslF345X06/wk-form4_1789087875.xml",
+    "xslF345X06/wk-form4_1789087843.xml",
+    "xslF345X06/wk-form4_1789087809.xml",
+    "jnj-20251228.htm",
+    "jnj-20241229.htm",
+    "jnj-20231231.htm",
+    "jnj-20230101.htm",
+    "jnj-20220102.htm",
+    "jnj-20210103.htm",
+    "form10-k20191229.htm",
+    "form10-k20181230.htm"
+   ],
+   "reportDate": [
+    "2026-09-08",
+    "2026-09-08",
+    "2026-09-08",
+    "2025-12-28",
+    "2024-12-29",
+    "2023-12-31",
+    "2023-01-01",
+    "2022-01-02",
+    "2021-01-03",
+    "2019-12-29",
+    "2018-12-30"
+   ],
+   "size": [
+    5855,
+    5874,
+    5882,
+    24877468,
+    24342209,
+    22222717,
+    24820081,
+    25022269,
+    25521070,
+    30955573,
+    27672234
+   ]
+  }
+ },
+ "fiscalYearEnd": "0103",
+ "flags": "",
+ "formerNames": [
+  {
+   "from": "1995-10-06T04:00:00.000Z",
+   "name": "JOHNSON & JOHNSON ET AL",
+   "to": "1996-01-23T05:00:00.000Z"
+  }
+ ],
+ "insiderTransactionForIssuerExists": 1,
+ "insiderTransactionForOwnerExists": 1,
+ "investorWebsite": "",
+ "lei": null,
+ "name": "JOHNSON & JOHNSON",
+ "ownerOrg": "03 Life Sciences",
+ "phone": "732-524-2455",
+ "sic": "2834",
+ "sicDescription": "Pharmaceutical Preparations",
+ "stateOfIncorporation": "NJ",
+ "stateOfIncorporationDescription": "NJ",
+ "tickers": [
+  "JNJ"
+ ],
+ "website": ""
+}
