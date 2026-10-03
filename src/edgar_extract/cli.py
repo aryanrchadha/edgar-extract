@@ -276,6 +276,41 @@ def label(
         console.print(f"\nstopped; progress is saved in {gold_file}")
 
 
+ner_app = typer.Typer(help="Train and evaluate the token classifier (needs the `ner` extra).")
+app.add_typer(ner_app, name="ner")
+
+
+@ner_app.command("train")
+def ner_train(
+    config: ConfigOpt = Path("config.yaml"),
+    epochs: Annotated[int | None, typer.Option(help="Override the configured epochs")] = None,
+) -> None:
+    """Fine-tune DistilBERT on silver + gold-train labels (gold test companies held out)."""
+    from edgar_extract.ner.run import run_training
+
+    settings = _load(config)
+    try:
+        report = run_training(settings, epochs=epochs)
+    except (RuntimeError, FileNotFoundError, ImportError) as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(report)
+
+
+@ner_app.command("evaluate")
+def ner_evaluate(config: ConfigOpt = Path("config.yaml")) -> None:
+    """Score regex and NER on the gold test split; write reports/ner_metrics.md."""
+    from edgar_extract.ner.run import run_evaluation
+
+    settings = _load(config)
+    try:
+        path = run_evaluation(settings)
+    except (RuntimeError, FileNotFoundError, ImportError) as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(path.read_text())
+
+
 @app.command()
 def asof(
     ticker: Annotated[str, typer.Option(help="Ticker")],

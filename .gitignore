@@ -7,4 +7,8 @@ __pycache__/
 data/
 models/*
 !models/.gitkeep
+!models/ner/
+models/ner/*
+!models/ner/MODEL_CARD.md
+!models/ner/train_report.json
 .DS_Store

@@ -21,6 +21,12 @@ dependencies = [
 [project.scripts]
 edgar-extract = "edgar_extract.cli:app"
 
+[project.optional-dependencies]
+ner = [
+    "torch==2.14.1",
+    "transformers==5.18.0",
+]
+
 [build-system]
 requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
