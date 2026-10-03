@@ -209,3 +209,10 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
   coverage, all with n and Wilson intervals); Streamlit + Plotly dashboard verified
   headless with sockets blocked (AppTest) and visually in a browser; usage-stats
   telemetry disabled; `--server.headless` avoids Streamlit's blocking first-run prompt.
+- **M8 done except the tag** (2026-10-03). `examples/pit_vs_naive.py`: ROA quintile
+  long-short, 15 annual periods, PIT vs naive. The May 1 primary schedule was fixed
+  before running, and a Feb 15 sensitivity run is reported alongside it. Restatements
+  changed 15% of inputs. Inside filing season the naive strategy holds different stocks in
+  13 of 15 years, and neither mean gap is distinguishable from zero. README rewritten with
+  a Known limitations section. **`v0.1.0` is tagged only after M4's gold-label metrics
+  exist**, so the tag marks a complete deliverable.
