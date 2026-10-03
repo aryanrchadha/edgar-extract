@@ -1,0 +1,55 @@
+# edgar-extract configuration.
+# Paths are relative to the directory you run the CLI from.
+
+sec:
+  # SEC fair-access policy requires a descriptive User-Agent with a contact email.
+  # Can also be set with the EDGAR_EXTRACT_EMAIL environment variable.
+  app_name: "edgar-extract research"
+  contact_email: ""
+  # SEC's published limit is 10 requests/second; we stay under 8.
+  max_requests_per_second: 8.0
+
+universe:
+  # Default universe: large caps across sectors. GE (GE HealthCare and GE Vernova
+  # spin-offs) and INTC (2024 segment reorganization) are included because later 10-Ks
+  # likely recast earlier periods. Which companies actually have changed prior-period
+  # values is measured from the data in M6, not assumed.
+  # EDIT BEFORE THE FIRST FULL DOWNLOAD.
+  tickers:
+    - AAPL
+    - MSFT
+    - AMZN
+    - GOOGL
+    - META
+    - NVDA
+    - JPM
+    - JNJ
+    - PG
+    - XOM
+    - WMT
+    - KO
+    - PFE
+    - INTC
+    - GE
+    - BA
+    - CAT
+    - DIS
+    - NKE
+    - KHC
+  # Optional explicit CIK overrides (ticker -> CIK) if the SEC ticker file is ambiguous.
+  cik_overrides: {}
+  # Optional SIC filter. Entries are codes ("3571") or inclusive ranges ("6000-6999").
+  # Empty include list means "include everything".
+  sic_include: []
+  sic_exclude: []
+
+# Number of most recent fiscal years of 10-K filings per company.
+years: 5
+
+paths:
+  data_dir: data
+  raw_dir: data/raw
+  interim_dir: data/interim
+  pit_db: data/pit.duckdb
+  reports_dir: reports
+  models_dir: models
