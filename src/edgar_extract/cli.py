@@ -15,7 +15,13 @@ from rich.table import Table
 
 from edgar_extract.config import ConfigError, Settings, load_settings
 from edgar_extract.edgar_client import EdgarClient, EdgarError
-from edgar_extract.pipeline import run_sections_stage, section_report_path, sections_path
+from edgar_extract.pipeline import (
+    extractions_path,
+    run_extract_stage,
+    run_sections_stage,
+    section_report_path,
+    sections_path,
+)
 from edgar_extract.skiplog import SkipLog
 from edgar_extract.universe import STAGE as UNIVERSE_STAGE
 from edgar_extract.universe import build_universe
@@ -42,7 +48,6 @@ class Stage(StrEnum):
 
 # Stages land milestone by milestone; until then the CLI says so instead of pretending.
 _NOT_YET: dict[Stage, str] = {
-    Stage.extract: "M3",
     Stage.xbrl: "M5",
     Stage.reconcile: "M5",
     Stage.pit: "M6",
@@ -159,10 +164,12 @@ def run(
             run_universe_stage(settings, client)
         if stage in (Stage.sections, Stage.all):
             _run_sections(settings, client)
+        if stage in (Stage.extract, Stage.all):
+            _print_extractions(run_extract_stage(settings), extractions_path(settings))
         if stage is Stage.all:
             console.print(
                 "[yellow]Later stages are not implemented yet; "
-                "ran the universe and sections stages.[/yellow]"
+                "ran universe, sections and extract.[/yellow]"
             )
         elif stage in _NOT_YET:
             raise _not_implemented(f"stage '{stage.value}'", _NOT_YET[stage])
@@ -171,15 +178,57 @@ def run(
         raise typer.Exit(1) from exc
 
 
+class Extractor(StrEnum):
+    regex = "regex"
+    ner = "ner"
+
+
 @app.command()
 def extract(
     ticker: Annotated[str, typer.Option(help="Ticker to extract")],
-    years: Annotated[int, typer.Option(help="Number of fiscal years")] = 5,
-    extractor: Annotated[str, typer.Option(help="regex or ner")] = "regex",
+    years: Annotated[int, typer.Option(help="Number of most recent fiscal years")] = 5,
+    extractor: Annotated[Extractor, typer.Option(help="Extractor to use")] = Extractor.regex,
     config: ConfigOpt = Path("config.yaml"),
 ) -> None:
-    """Extract numeric entities from one company's 10-K filings."""
-    raise _not_implemented("extract", "M3")
+    """Extract numeric entities from one company's isolated 10-K sections.
+
+    Needs the sections stage to have run (``edgar-extract run --stage sections``).
+    """
+    settings = _load(config)
+    name = f"extractions_{ticker.upper()}_{extractor.value}"
+    try:
+        df = run_extract_stage(
+            settings,
+            extractor=extractor.value,
+            tickers=[ticker.upper()],
+            years=years,
+            output_name=name,
+        )
+    except (FileNotFoundError, ValueError, ImportError) as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if df.empty:
+        console.print(
+            f"[yellow]no extractions for {ticker.upper()}; is it in the universe?[/yellow]"
+        )
+        raise typer.Exit(1)
+    _print_extractions(df, extractions_path(settings, name))
+
+
+def _print_extractions(df: pd.DataFrame, path: Path) -> None:
+    table = Table(title="Extractions by role and section")
+    for col in ("role", "Item 1A", "Item 7", "total"):
+        table.add_column(col)
+    counts = df.pivot_table(index="role", columns="section", values="span_start", aggfunc="count")
+    counts = counts.reindex(columns=["1A", "7"]).fillna(0).astype(int)
+    for role, row in counts.iterrows():
+        table.add_row(str(role), str(row["1A"]), str(row["7"]), str(row.sum()))
+    console.print(table)
+    structured = (df["role"] != "OTHER_NUMERIC").mean() if len(df) else 0.0
+    console.print(
+        f"{len(df):,} numeric spans from {df['accession'].nunique()} filings; "
+        f"{structured:.1%} assigned a specific role; written to {path}"
+    )
 
 
 @app.command()

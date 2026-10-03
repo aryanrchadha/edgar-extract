@@ -89,3 +89,26 @@ def test_sections_stage_writes_parquet_report_and_logs_skips(
     unavailable = [s for s in skips if s.reason == "filing document unavailable"]
     assert len(unavailable) == 8  # 10 filings in the universe, 2 recorded
     assert all(s.stage == "sections" and s.accession for s in unavailable)
+
+
+def test_extract_command_for_one_ticker(config_path: Path, patched_client: None) -> None:
+    runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "universe"])
+    runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "sections"])
+    result = runner.invoke(
+        cli.app, ["extract", "--ticker", "xom", "--years", "5", "--config", str(config_path)]
+    )
+    assert result.exit_code == 0, result.output
+    out = config_path.parent / "data" / "interim" / "extractions_XOM_regex.parquet"
+    df = pd.read_parquet(out)
+    assert set(df["ticker"]) == {"XOM"} and len(df) > 50
+    for col in ("accession", "section", "sentence", "span_start", "span_end", "raw_text",
+                "value_usd", "unit_scale", "role", "extractor"):  # fmt: skip
+        assert col in df.columns
+
+
+def test_extract_unknown_ticker_fails_cleanly(config_path: Path, patched_client: None) -> None:
+    runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "universe"])
+    runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "sections"])
+    result = runner.invoke(cli.app, ["extract", "--ticker", "ZZZ", "--config", str(config_path)])
+    assert result.exit_code == 1
+    assert "no extractions" in result.output

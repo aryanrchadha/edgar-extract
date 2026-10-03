@@ -8,19 +8,24 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
 
+from edgar_extract.baseline_extract import EXTRACTOR_NAME, assign_role
 from edgar_extract.config import Settings
 from edgar_extract.edgar_client import EdgarClient, EdgarError
+from edgar_extract.numeric_spans import find_numeric_mentions, iter_sentences
 from edgar_extract.sections import Section, SectionStatus, extract_sections
 from edgar_extract.skiplog import SkipLog
 
 log = logging.getLogger(__name__)
 
 SECTIONS_STAGE = "sections"
+EXTRACT_STAGE = "extract"
 
 SECTION_COLUMNS = [
     "ticker",
@@ -183,3 +188,129 @@ def section_report(sections: pd.DataFrame) -> pd.DataFrame:
             report.index.isin(off.index), f"more than {OUTLIER_COMPANY_RATIO:g}x off company median"
         )
     return report.sort_values(["ticker", "fiscal_year", "form", "item"]).reset_index(drop=True)
+
+
+# -- extraction --------------------------------------------------------------------------
+
+EXTRACTION_COLUMNS = [
+    "ticker",
+    "cik",
+    "fiscal_year",
+    "form",
+    "accession",
+    "filing_date",
+    "report_date",
+    "primary_doc_url",
+    "section",
+    "sentence",
+    "sentence_start",
+    "sentence_end",
+    "span_start",
+    "span_end",
+    "raw_text",
+    "value",
+    "unit",
+    "numeric_kind",
+    "value_usd",
+    "unit_scale",
+    "scale_explicit",
+    "is_negative",
+    "range_id",
+    "range_part",
+    "role",
+    "role_cue",
+    "extractor",
+    "block_kind",
+]
+
+
+def extractions_path(settings: Settings, name: str = "extractions") -> Path:
+    return settings.paths.interim_dir / f"{name}.parquet"
+
+
+def extract_regex(sections: pd.DataFrame) -> pd.DataFrame:
+    """Run the regex baseline over every section with status "ok".
+
+    ``span_start``/``span_end`` and ``sentence_start``/``sentence_end`` are offsets into
+    the section text stored in sections.parquet (keyed by accession and item), so every
+    value can be traced to the exact characters it came from.
+    """
+    rows: list[dict[str, object]] = []
+    ok = sections[sections["status"] == SectionStatus.OK.value]
+    for sec in ok.itertuples(index=False):
+        text = str(sec.text)
+        starts = [int(x) for x in cast("Sequence[int]", sec.block_starts)]
+        kinds = [str(x) for x in cast("Sequence[str]", sec.block_kinds)]
+        for sent in iter_sentences(text, starts, kinds):
+            for m in find_numeric_mentions(sent.text):
+                decision = assign_role(sent.text, m)
+                rows.append(
+                    {
+                        "ticker": sec.ticker,
+                        "cik": sec.cik,
+                        "fiscal_year": sec.fiscal_year,
+                        "form": sec.form,
+                        "accession": sec.accession,
+                        "filing_date": sec.filing_date,
+                        "report_date": sec.report_date,
+                        "primary_doc_url": sec.primary_doc_url,
+                        "section": sec.item,
+                        "sentence": sent.text,
+                        "sentence_start": sent.start,
+                        "sentence_end": sent.end,
+                        "span_start": sent.start + m.start,
+                        "span_end": sent.start + m.end,
+                        "raw_text": m.raw_text,
+                        "value": m.value,
+                        "unit": m.unit,
+                        "numeric_kind": m.numeric_kind,
+                        "value_usd": m.value_usd,
+                        "unit_scale": m.unit_scale,
+                        "scale_explicit": m.scale_explicit,
+                        "is_negative": m.is_negative,
+                        "range_id": m.range_id,
+                        "range_part": m.range_part,
+                        "role": decision.role.value,
+                        "role_cue": decision.cue,
+                        "extractor": EXTRACTOR_NAME,
+                        "block_kind": sent.block_kind,
+                    }
+                )
+    df = pd.DataFrame(rows, columns=EXTRACTION_COLUMNS)
+    return df.astype({"range_id": "Int64", "value_usd": "Float64"})
+
+
+def load_sections(settings: Settings) -> pd.DataFrame:
+    path = sections_path(settings)
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} not found; run `edgar-extract run --stage sections` first")
+    return pd.read_parquet(path)
+
+
+def run_extract_stage(
+    settings: Settings,
+    *,
+    extractor: str = "regex",
+    tickers: list[str] | None = None,
+    years: int | None = None,
+    output_name: str = "extractions",
+) -> pd.DataFrame:
+    """Extract numeric entities from isolated sections and write ``<output_name>.parquet``."""
+    sections = load_sections(settings)
+    if tickers:
+        sections = sections[sections["ticker"].isin(tickers)]
+    if years:
+        latest = sections.groupby("ticker")["fiscal_year"].transform("max")
+        sections = sections[sections["fiscal_year"] > latest - years]
+    if extractor == "regex":
+        df = extract_regex(sections)
+    elif extractor == "ner":
+        from edgar_extract.ner.infer import extract_ner  # heavy imports, load lazily
+
+        df = extract_ner(sections, settings)
+    else:
+        raise ValueError(f"unknown extractor {extractor!r}; use 'regex' or 'ner'")
+    out = extractions_path(settings, output_name)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(out, index=False)
+    return df

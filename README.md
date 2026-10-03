@@ -5,7 +5,8 @@ Factors (Item 1A), extracts numeric entities from the prose, reconciles them aga
 and stores the result in a **point-in-time (PIT) fundamentals database**: a query "as of
 date D" returns only what was knowable on D.
 
-> Status: **M1-M2 complete** (SEC client, universe builder, section isolation). Later stages
+> Status: **M1-M3 complete** (SEC client, universe builder, section isolation, regex
+> baseline extractor). Later stages
 > print "not implemented yet" instead of producing output. See [PLAN.md](PLAN.md) for the
 > design, risks and milestone status.
 
@@ -73,9 +74,14 @@ This downloads each filing's primary document (cached), isolates Item 1A and Ite
 `reports/section_report.csv` (character counts per section per filing, outliers flagged).
 `--stage all` runs every implemented stage in order.
 
-Stage commands that land in later milestones (`extract`, `asof`, `dashboard`, and
-`run --stage sections|extract|xbrl|reconcile|pit|qa`) currently exit with code 2 and a
-message saying which milestone implements them.
+```bash
+uv run edgar-extract run --stage extract              # whole universe -> extractions.parquet
+uv run edgar-extract extract --ticker AAPL --years 5  # one company -> extractions_AAPL_regex.parquet
+```
+
+Stage commands that land in later milestones (`asof`, `dashboard`, `--extractor ner`, and
+`run --stage xbrl|reconcile|pit|qa`) currently exit non-zero with a message saying which
+milestone implements them.
 
 ## SEC access
 
@@ -124,6 +130,54 @@ Results on the 102 filings in the default universe (FY2021-FY2025):
 
 Every non-ok section is also in the skip log with its reason.
 
+## Numeric extraction (regex baseline)
+
+`numeric_spans.py` splits each prose paragraph into sentences (pysbd, offsets located
+left to right) and finds numeric entities: dollar amounts with scale words (`$1.2 billion`,
+`$845 million`, `$(3.1) million`), per-share amounts, percentages (`12.4%`, `(2)%`),
+percentage and basis points, scaled counts, parenthesized decimals, and ranges
+(`$1.2 to $1.4 billion`, where the scale on either end applies to both). Each entity gets a
+kind: `level`, `delta` ("increased $142 million"), `pct`, `pct_change` ("increased 12%"),
+`per_share`, `count`, `points` or `number`. Values are normalized to base units with the
+scale kept explicit (`value_usd=1.2e9, unit_scale=1e9`). Years, note and item numbers,
+dates, and accounting-standard codes are not extracted.
+
+Table rows are not prose and are skipped. A block counts as prose when it has 5 or more
+alphabetic words, letters make up at least half of it, and it is not a line of figures
+without sentence punctuation.
+
+`baseline_extract.py` assigns a role by keyword rules, documented in the module, and
+records the deciding cue in `role_cue` for auditing. The order is:
+1. `GUIDANCE` for a company forward-looking sentence ("we expect", "is expected to",
+   "our ... outlook");
+2. `RESTATED_PRIOR` for restatement language ("as restated", "have been recast"), but not
+   "amended and restated";
+3. otherwise the nearest keyword to the left: `LITIGATION_RESERVE`, `ONE_TIME_CHARGE`,
+   `RD_EXPENSE` or `REVENUE`;
+4. else `OTHER_NUMERIC`.
+
+`extractions.parquet` has one row per numeric entity. Columns:
+- the spec columns: `ticker, accession, section, sentence, span_start, span_end, raw_text,
+  value_usd, unit_scale, role, extractor`;
+- lineage: `primary_doc_url`, `sentence_start/sentence_end`, `filing_date`;
+- `value`, `unit`, `numeric_kind`, `is_negative` and range fields.
+
+All offsets index into the section text in `sections.parquet`, and a test checks that
+`text[span_start:span_end] == raw_text` for every row.
+
+Baseline on the default universe: **18,087 entities from 95 filings**. That count is only
+how often each rule fired, not accuracy; accuracy is measured against gold labels in M4.
+
+| role | Item 1A | Item 7 |
+|---|---|---|
+| REVENUE | 10 | 1,678 |
+| GUIDANCE | 26 | 516 |
+| ONE_TIME_CHARGE | 35 | 808 |
+| LITIGATION_RESERVE | 1 | 81 |
+| RD_EXPENSE | 12 | 100 |
+| RESTATED_PRIOR | 0 | 3 |
+| OTHER_NUMERIC | 477 | 14,340 |
+
 ## Conventions worth knowing
 
 - **Fiscal year** = year of the 10-K's period end, minus one when the period ends in the
@@ -159,8 +213,12 @@ Collected here as milestones land.
   next item title on the last page. If the last page's other content has no recognizable
   item title, up to one page of it remains: INTC Item 1A ends with "Other Key Information"
   text, and GE Item 7 ends with the Item 5 share-repurchase table.
-- Section text includes table rows (marked in `block_kinds`) so offsets stay exact; prose
-  extraction in M3 uses the block kinds to tell them apart.
+- Section text includes table rows (marked in `block_kinds`) so offsets stay exact. The
+  extractor reads prose only. Some companies (e.g. AAPL) state revenue almost entirely in
+  MD&A tables, so their prose yields few REVENUE entities. That is a property of the
+  filings, not a parsing failure, and it limits text-vs-XBRL coverage for those companies.
+- Non-dollar amounts (EUR, GBP, JPY, CHF) are detected and labeled `other_currency` but
+  never converted, since the pipeline has no FX rates.
 
 - Fiscal-year labels follow the period-end convention above, not each company's own naming.
 - The PIT database is keyed by CIK. After a holding-company reorganization (XOM, 2026),

@@ -182,3 +182,8 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
   (XOM). Each is handled by an explicit rule and covered by a synthetic test plus golden
   checks on 20 recorded filings (one per company). Two AAPL Item 7s are flagged as short
   outliers; that is genuine (Apple's MD&A is about 15k characters against a 68k median).
+- **M3 done** (2026-10-03). 18,087 numeric entities from 95 filings, with lineage verified
+  exactly for every row. A first sample showed table rows leaking into "prose" and several
+  cue false positives ("amended and restated", HELOC "recast", accounting "guidance",
+  "settlement of stock-based compensation"); the rules were tightened against general
+  patterns, not those sentences. The baseline's accuracy is measured on gold labels in M4.

@@ -11,6 +11,7 @@ dependencies = [
     "pyarrow==25.0.1",
     "pydantic==2.13.5",
     "pydantic-settings==2.15.0",
+    "pysbd==0.3.4",
     "pyyaml==6.0.3",
     "requests==2.34.2",
     "rich==15.0.0",
@@ -46,6 +47,10 @@ warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
+module = ["pysbd", "pysbd.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
@@ -54,6 +59,8 @@ disallow_incomplete_defs = false
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = ["network: test needs live SEC access (never run by default)"]
+# pysbd 0.3.4 ships regexes with invalid escapes; harmless, but noisy.
+filterwarnings = ["ignore::SyntaxWarning"]
 
 [dependency-groups]
 dev = [
