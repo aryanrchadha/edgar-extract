@@ -163,7 +163,7 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
 | M2 | section isolation, ≥15 fixture filings, `section_report.csv` | |
 | M3 | numeric spans, regex baseline, `extractions.parquet` | |
 | M4 | silver labels, labeling tool, DistilBERT, metrics | **user labels ~200 sentences**; I stop and wait |
-| M5 | `tag_map.yaml`, reconciliation, mismatch causes, audit | the 25-mismatch audit needs a human judgment; I will draft it with my reasoning per case and mark it as my review, not the user's |
+| M5 | `tag_map.yaml`, reconciliation, mismatch causes, audit | audit drafted by Claude with per-case reasoning and XBRL checks; the user may re-review |
 | M6 | PIT DB, invariants, property test | |
 | M7 | Streamlit dashboard | |
 | M8 | `pit_vs_naive.py`, README polish, `v0.1.0` | |
@@ -187,3 +187,17 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
   cue false positives ("amended and restated", HELOC "recast", accounting "guidance",
   "settlement of stock-based compensation"); the rules were tightened against general
   patterns, not those sentences. The baseline's accuracy is measured on gold labels in M4.
+- **M4 code done; waiting for gold labels** (2026-10-03).
+  - Silver: a first version matched any fact within the text's rounding, and an audit showed
+    most matches were coincidences. Matching is now limited to 0.1% precision, giving 962
+    silver spans.
+  - iXBRL covers 0.68% of Item 7 prose dollar amounts.
+  - Gold candidates: 218 sentences.
+  - Training, inference and evaluation are smoke-tested on silver only. The user is
+    labeling; no metrics exist yet.
+- **M5 done** (2026-10-03). Inline-XBRL dimensional facts are parsed per filing (208,727
+  facts). Reconciliation of 3,270 role-bearing extractions: 202 match, 1,767 mismatch,
+  1,301 have no counterpart.
+  - Cause rules guard against chance matches (the first versions fired on coincidences).
+  - Unit tests caught a year-regex bug ("in 2023," was missed).
+  - Audit of 25 random mismatches: 20 correct (80%), reviewed by Claude, not the user.

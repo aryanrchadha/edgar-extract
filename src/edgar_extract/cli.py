@@ -18,7 +18,9 @@ from edgar_extract.edgar_client import EdgarClient, EdgarError
 from edgar_extract.pipeline import (
     extractions_path,
     run_extract_stage,
+    run_reconcile_stage,
     run_sections_stage,
+    run_xbrl_stage,
     section_report_path,
     sections_path,
 )
@@ -48,8 +50,6 @@ class Stage(StrEnum):
 
 # Stages land milestone by milestone; until then the CLI says so instead of pretending.
 _NOT_YET: dict[Stage, str] = {
-    Stage.xbrl: "M5",
-    Stage.reconcile: "M5",
     Stage.pit: "M6",
     Stage.qa: "M7",
 }
@@ -166,10 +166,15 @@ def run(
             _run_sections(settings, client)
         if stage in (Stage.extract, Stage.all):
             _print_extractions(run_extract_stage(settings), extractions_path(settings))
+        if stage in (Stage.xbrl, Stage.all):
+            counts = run_xbrl_stage(settings, client)
+            console.print(f"xbrl: {counts}")
+        if stage in (Stage.reconcile, Stage.all):
+            _print_reconciliation(run_reconcile_stage(settings))
         if stage is Stage.all:
             console.print(
                 "[yellow]Later stages are not implemented yet; "
-                "ran universe, sections and extract.[/yellow]"
+                "ran universe, sections, extract, xbrl and reconcile.[/yellow]"
             )
         elif stage in _NOT_YET:
             raise _not_implemented(f"stage '{stage.value}'", _NOT_YET[stage])
@@ -213,6 +218,25 @@ def extract(
         )
         raise typer.Exit(1)
     _print_extractions(df, extractions_path(settings, name))
+
+
+RECONCILIATION_HINT = "data/interim/reconciliation.parquet"
+
+
+def _print_reconciliation(df: pd.DataFrame) -> None:
+    table = Table(title="Text vs XBRL reconciliation")
+    for col in ("status", "cause", "count", "share"):
+        table.add_column(col)
+    counts = df.groupby(["status", "mismatch_cause"], dropna=False).size().reset_index(name="n")
+    for row in counts.to_dict("records"):
+        cause = row["mismatch_cause"]
+        cause_text = "" if pd.isna(cause) else str(cause)
+        n = int(row["n"])
+        table.add_row(str(row["status"]), cause_text, str(n), f"{n / len(df):.1%}")
+    console.print(table)
+    console.print(
+        f"{len(df):,} role-bearing extractions reconciled; written to {RECONCILIATION_HINT}"
+    )
 
 
 def _print_extractions(df: pd.DataFrame, path: Path) -> None:

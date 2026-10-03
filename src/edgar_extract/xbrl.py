@@ -15,6 +15,7 @@ and other dimensional facts must come from the filing's own inline XBRL.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -162,9 +163,7 @@ def canonicalize(facts: pd.DataFrame, tag_map: TagMap) -> pd.DataFrame:
     index = tag_map.tag_index()
     mapped = facts[facts["tag"].isin(index)].copy()
     if mapped.empty:
-        return mapped.assign(
-            canonical_field=pd.Series(dtype="string"), tag_priority=pd.Series(dtype="int64")
-        )
+        return pd.DataFrame(columns=[*FACT_COLUMNS, "canonical_field", "tag_priority"])
     mapped["canonical_field"] = mapped["tag"].map(lambda t: index[t][0])
     mapped["tag_priority"] = mapped["tag"].map(lambda t: index[t][1])
     spec_unit = mapped["canonical_field"].map(lambda f: tag_map.fields[f].unit)
@@ -177,3 +176,103 @@ def canonicalize(facts: pd.DataFrame, tag_map: TagMap) -> pd.DataFrame:
     # dropna=False keeps instants (period_start is NaT) as their own groups.
     best = mapped.groupby(key, dropna=False, sort=False).head(1)
     return best.reset_index(drop=True)
+
+
+# -- inline XBRL (dimensional facts) ---------------------------------------------------
+
+INLINE_COLUMNS = [
+    "concept",
+    "value",
+    "unit",
+    "decimals",
+    "period_start",
+    "period_end",
+    "dims",
+    "is_dimensional",
+    "context_id",
+]
+
+_DIGITS_RE = re.compile(r"[\d,]*\.?\d+")
+
+
+def _local(tag: object) -> str:
+    return tag.lower() if isinstance(tag, str) else ""
+
+
+def inline_fact_value(
+    text: str, scale: str | None, sign: str | None, fmt: str | None
+) -> float | None:
+    """Numeric value of an ``ix:nonFraction`` from its displayed text and attributes."""
+    fmt = (fmt or "").lower()
+    m = _DIGITS_RE.search(text.replace(" ", ""))
+    if m is None:
+        if "zero" in fmt or text.strip() in {"-", "\N{EM DASH}", "\N{EN DASH}"}:
+            return 0.0
+        return None  # e.g. numbers written as words
+    try:
+        value = float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+    if "comma-decimal" in fmt or "numcommadecimal" in fmt:
+        return None  # European formats do not occur in US 10-Ks; refuse rather than guess
+    value *= 10.0 ** int(scale or 0)
+    return -value if sign == "-" else value
+
+
+def parse_inline_xbrl(html: bytes | str) -> pd.DataFrame:
+    """All numeric inline-XBRL facts of a filing with their contexts and dimensions."""
+    from edgar_extract.htmltext import parse_html
+
+    root = parse_html(html)
+    contexts: dict[str, tuple[str | None, str | None, str]] = {}
+    units: dict[str, str] = {}
+    for el in root.iter():
+        tag = _local(el.tag)
+        if tag == "xbrli:context":
+            start = end = instant = None
+            members: list[str] = []
+            for d in el.iter():
+                t = _local(d.tag)
+                if t == "xbrli:startdate":
+                    start = (d.text or "").strip()
+                elif t == "xbrli:enddate":
+                    end = (d.text or "").strip()
+                elif t == "xbrli:instant":
+                    instant = (d.text or "").strip()
+                elif t in ("xbrldi:explicitmember", "xbrldi:typedmember"):
+                    members.append(f"{d.get('dimension')}={''.join(d.itertext()).strip()}")
+            contexts[el.get("id") or ""] = (start, end or instant, ";".join(sorted(members)))
+        elif tag == "xbrli:unit":
+            measures = [
+                (m.text or "").strip() for m in el.iter() if _local(m.tag) == "xbrli:measure"
+            ]
+            units[el.get("id") or ""] = "/".join(x.split(":")[-1] for x in measures)
+    rows = []
+    for el in root.iter():
+        if _local(el.tag) != "ix:nonfraction":
+            continue
+        if el.get("xsi:nil") == "true":
+            continue
+        shown = "".join(el.itertext())
+        value = inline_fact_value(shown, el.get("scale"), el.get("sign"), el.get("format"))
+        ctx = contexts.get(el.get("contextref") or "")
+        if value is None or ctx is None:
+            continue
+        start, end, dims = ctx
+        rows.append(
+            {
+                "concept": el.get("name"),
+                "value": value,
+                "unit": units.get(el.get("unitref") or "", el.get("unitref") or ""),
+                "decimals": el.get("decimals"),
+                "period_start": start,
+                "period_end": end,
+                "dims": dims,
+                "is_dimensional": bool(dims),
+                "context_id": el.get("contextref"),
+            }
+        )
+    df = pd.DataFrame(rows, columns=INLINE_COLUMNS)
+    df["period_start"] = pd.to_datetime(df["period_start"])
+    df["period_end"] = pd.to_datetime(df["period_end"])
+    return df.drop_duplicates(["concept", "value", "context_id"]).reset_index(drop=True)

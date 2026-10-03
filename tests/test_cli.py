@@ -86,9 +86,11 @@ def test_sections_stage_writes_parquet_report_and_logs_skips(
     report = pd.read_csv(config_path.parent / "reports" / "section_report.csv")
     assert len(report) == 4 and "outlier" in report.columns
     skips = SkipLog.read(interim / "skipped.jsonl")
-    unavailable = [s for s in skips if s.reason == "filing document unavailable"]
+    unavailable = [
+        s for s in skips if s.stage == "sections" and s.reason == "filing document unavailable"
+    ]
     assert len(unavailable) == 8  # 10 filings in the universe, 2 recorded
-    assert all(s.stage == "sections" and s.accession for s in unavailable)
+    assert all(s.accession for s in unavailable)
 
 
 def test_extract_command_for_one_ticker(config_path: Path, patched_client: None) -> None:
@@ -112,3 +114,15 @@ def test_extract_unknown_ticker_fails_cleanly(config_path: Path, patched_client:
     result = runner.invoke(cli.app, ["extract", "--ticker", "ZZZ", "--config", str(config_path)])
     assert result.exit_code == 1
     assert "no extractions" in result.output
+
+
+def test_xbrl_and_reconcile_stages_survive_missing_companyfacts(
+    config_path: Path, patched_client: None
+) -> None:
+    result = runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "all"])
+    assert result.exit_code == 0, result.output
+    interim = config_path.parent / "data" / "interim"
+    skips = SkipLog.read(interim / "skipped.jsonl")
+    assert any(s.stage == "xbrl" and s.reason == "companyfacts unavailable" for s in skips)
+    rec = pd.read_parquet(interim / "reconciliation.parquet")
+    assert set(rec["status"]) <= {"NO_XBRL_COUNTERPART"}

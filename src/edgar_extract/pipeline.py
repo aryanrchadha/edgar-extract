@@ -332,7 +332,7 @@ def silver_path(settings: Settings) -> Path:
 
 
 def load_all_facts(settings: Settings, client: EdgarClient, ciks: Sequence[int]) -> pd.DataFrame:
-    from edgar_extract.xbrl import load_company_facts
+    from edgar_extract.xbrl import FACT_COLUMNS, load_company_facts
 
     frames = []
     skiplog = SkipLog(settings.paths.skip_log)
@@ -341,7 +341,7 @@ def load_all_facts(settings: Settings, client: EdgarClient, ciks: Sequence[int])
             frames.append(load_company_facts(client, int(cik)))
         except EdgarError as exc:
             skiplog.record("xbrl", "companyfacts unavailable", cik=int(cik), detail=str(exc))
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=FACT_COLUMNS)
 
 
 def prepare_labeling(
@@ -435,3 +435,88 @@ def write_ixbrl_coverage_report(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
     return path
+
+
+# -- XBRL and reconciliation (M5) ----------------------------------------------------------
+
+XBRL_STAGE = "xbrl"
+
+
+def xbrl_paths(settings: Settings) -> dict[str, Path]:
+    d = settings.paths.interim_dir
+    return {
+        "facts": d / "xbrl_facts.parquet",
+        "canonical": d / "canonical_facts.parquet",
+        "inline": d / "ixbrl_facts.parquet",
+        "reconciliation": d / "reconciliation.parquet",
+    }
+
+
+def run_xbrl_stage(settings: Settings, client: EdgarClient) -> dict[str, int]:
+    """companyfacts for every company + inline-XBRL facts for every filing."""
+    from edgar_extract.xbrl import INLINE_COLUMNS, canonicalize, load_tag_map, parse_inline_xbrl
+
+    skiplog = SkipLog(settings.paths.skip_log)
+    skiplog.clear_stage(XBRL_STAGE)
+    universe = load_universe(settings)
+    paths = xbrl_paths(settings)
+    facts = load_all_facts(settings, client, universe["cik"].unique().tolist())
+    facts.to_parquet(paths["facts"], index=False)
+    canonical = canonicalize(facts, load_tag_map())
+    canonical.to_parquet(paths["canonical"], index=False)
+    frames = []
+    for filing in universe.to_dict("records"):
+        ticker, cik, accession = str(filing["ticker"]), int(filing["cik"]), str(filing["accession"])
+        if not filing["is_inline_xbrl"]:
+            skiplog.record(
+                XBRL_STAGE, "filing is not inline XBRL", ticker=ticker, cik=cik, accession=accession
+            )
+            continue
+        try:
+            html = client.filing_document(cik, accession, str(filing["primary_document"]))
+        except EdgarError as exc:
+            skiplog.record(
+                XBRL_STAGE,
+                "filing document unavailable",
+                ticker=ticker,
+                cik=cik,
+                accession=accession,
+                detail=str(exc),
+            )
+            continue
+        df = parse_inline_xbrl(html)
+        if df.empty:
+            skiplog.record(
+                XBRL_STAGE,
+                "no numeric inline-XBRL facts parsed",
+                ticker=ticker,
+                cik=cik,
+                accession=accession,
+            )
+            continue
+        frames.append(df.assign(cik=cik, accession=accession))
+    empty = pd.DataFrame(columns=[*INLINE_COLUMNS, "cik", "accession"])
+    inline = pd.concat(frames, ignore_index=True) if frames else empty
+    inline.to_parquet(paths["inline"], index=False)
+    return {"facts": len(facts), "canonical_facts": len(canonical), "inline_facts": len(inline)}
+
+
+def run_reconcile_stage(settings: Settings, extractions_name: str = "extractions") -> pd.DataFrame:
+    from edgar_extract.reconcile import reconcile
+    from edgar_extract.xbrl import load_tag_map
+
+    paths = xbrl_paths(settings)
+    for key in ("canonical", "inline"):
+        if not paths[key].is_file():
+            raise FileNotFoundError(
+                f"{paths[key]} not found; run `edgar-extract run --stage xbrl` first"
+            )
+    extractions = pd.read_parquet(extractions_path(settings, extractions_name))
+    result = reconcile(
+        extractions,
+        pd.read_parquet(paths["canonical"]),
+        pd.read_parquet(paths["inline"]),
+        load_tag_map(),
+    )
+    result.to_parquet(paths["reconciliation"], index=False)
+    return result
