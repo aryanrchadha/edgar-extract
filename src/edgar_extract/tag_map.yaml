@@ -1,0 +1,276 @@
+# XBRL tag -> canonical field mapping.
+#
+# Each canonical field lists its XBRL concepts in PRIORITY order. When a filing reports more
+# than one of them for the same period, the first one listed wins and the chosen tag is
+# recorded with the value (lineage). Example: Alphabet reports both us-gaap:Revenues
+# (total) and RevenueFromContractWithCustomerExcludingAssessedTax (which excludes hedging
+# gains); total revenue is us-gaap:Revenues, so it is listed first.
+#
+# Keys:
+#   period:  duration (income / cash-flow items) or instant (balance-sheet items)
+#   unit:    XBRL unit the value must carry
+#   role:    role a matching text mention implies, in the NER label set
+#            (REVENUE, ONE_TIME_CHARGE, OTHER_NUMERIC); used for silver labels
+#   baseline_role: the regex extractor's finer role, used by reconciliation
+#   tags:    concepts in priority order
+#
+# The tag lists were drawn from the concepts the 20 default-universe companies actually
+# used in FY2021+ 10-K facts (survey on 2026-10-03), plus standard predecessors such as
+# SalesRevenueNet for older filings.
+
+fields:
+  Revenues:
+    period: duration
+    unit: USD
+    role: REVENUE
+    baseline_role: REVENUE
+    tags:
+      - us-gaap:Revenues
+      - us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax
+      - us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax
+      - us-gaap:RevenuesNetOfInterestExpense  # banks (JPM, WFC)
+      - us-gaap:SalesRevenueNet
+      - us-gaap:SalesRevenueGoodsNet
+      - us-gaap:SalesRevenueServicesNet
+
+  CostOfRevenue:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:CostOfRevenue
+      - us-gaap:CostOfGoodsAndServicesSold
+      - us-gaap:CostOfGoodsSold
+
+  GrossProfit:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:GrossProfit
+
+  ResearchAndDevelopmentExpense:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: RD_EXPENSE
+    tags:
+      - us-gaap:ResearchAndDevelopmentExpense
+      - us-gaap:ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost
+
+  SellingGeneralAndAdministrativeExpense:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:SellingGeneralAndAdministrativeExpense
+
+  RestructuringCharges:
+    period: duration
+    unit: USD
+    role: ONE_TIME_CHARGE
+    baseline_role: ONE_TIME_CHARGE
+    tags:
+      - us-gaap:RestructuringCharges
+      - us-gaap:RestructuringAndRelatedCostIncurredCost
+      - us-gaap:RestructuringSettlementAndImpairmentProvisions
+      - us-gaap:RestructuringCostsAndAssetImpairmentCharges
+      - us-gaap:RestructuringCosts
+
+  ImpairmentCharges:
+    period: duration
+    unit: USD
+    role: ONE_TIME_CHARGE
+    baseline_role: ONE_TIME_CHARGE
+    tags:
+      - us-gaap:GoodwillAndIntangibleAssetImpairment
+      - us-gaap:GoodwillImpairmentLoss
+      - us-gaap:AssetImpairmentCharges
+      - us-gaap:ImpairmentOfIntangibleAssetsExcludingGoodwill
+      - us-gaap:ImpairmentOfIntangibleAssetsIndefinitelivedExcludingGoodwill
+      - us-gaap:ImpairmentOfIntangibleAssetsFinitelived
+      - us-gaap:ImpairmentOfLongLivedAssetsHeldForUse
+      - us-gaap:TangibleAssetImpairmentCharges
+
+  LitigationExpense:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: LITIGATION_RESERVE
+    tags:
+      - us-gaap:LitigationSettlementExpense
+      - us-gaap:LossContingencyLossInPeriod
+      - us-gaap:GainLossRelatedToLitigationSettlement
+
+  LitigationReserve:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: LITIGATION_RESERVE
+    tags:
+      - us-gaap:LossContingencyAccrualAtCarryingValue
+      - us-gaap:LossContingencyAccrualCarryingValueCurrent
+      - us-gaap:LitigationReserve
+      - us-gaap:LitigationReserveCurrent
+      - us-gaap:LitigationReserveNoncurrent
+
+  OperatingIncomeLoss:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:OperatingIncomeLoss
+
+  InterestExpense:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:InterestExpense
+      - us-gaap:InterestExpenseNonoperating
+      - us-gaap:InterestExpenseDebt
+
+  IncomeTaxExpenseBenefit:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:IncomeTaxExpenseBenefit
+
+  NetIncomeLoss:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:NetIncomeLoss
+      - us-gaap:ProfitLoss
+      - us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic
+
+  EarningsPerShareDiluted:
+    period: duration
+    unit: USD/shares
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:EarningsPerShareDiluted
+      - us-gaap:EarningsPerShareBasicAndDiluted
+
+  WeightedAverageDilutedShares:
+    period: duration
+    unit: shares
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding
+
+  DepreciationAndAmortization:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:DepreciationDepletionAndAmortization
+      - us-gaap:DepreciationAmortizationAndAccretionNet
+      - us-gaap:DepreciationAndAmortization
+
+  NetCashProvidedByOperatingActivities:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:NetCashProvidedByUsedInOperatingActivities
+      - us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations
+
+  CapitalExpenditures:
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
+      - us-gaap:PaymentsToAcquireProductiveAssets
+
+  Assets:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:Assets
+
+  AssetsCurrent:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:AssetsCurrent
+
+  Liabilities:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:Liabilities
+
+  LiabilitiesCurrent:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:LiabilitiesCurrent
+
+  LongTermDebtNoncurrent:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:LongTermDebtNoncurrent
+      - us-gaap:LongTermDebtAndCapitalLeaseObligations
+      - us-gaap:LongTermDebt
+
+  StockholdersEquity:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:StockholdersEquity
+      - us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+
+  RetainedEarnings:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:RetainedEarningsAccumulatedDeficit
+
+  CashAndCashEquivalents:
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:CashAndCashEquivalentsAtCarryingValue
+      - us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents
+
+  SharesOutstanding:
+    period: instant
+    unit: shares
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:CommonStockSharesOutstanding
+      - dei:EntityCommonStockSharesOutstanding

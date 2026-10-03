@@ -133,6 +133,8 @@ class Section:
     detail: str = ""
     block_starts: list[int] = field(default_factory=list)
     block_kinds: list[str] = field(default_factory=list)
+    # Inline-XBRL facts displayed in the section: dicts with the block index and IxFact fields.
+    ix_facts: list[dict[str, object]] = field(default_factory=list)
 
     @property
     def n_chars(self) -> int:
@@ -293,6 +295,20 @@ def best_span(blocks: list[Block], heads: list[Heading], item: str) -> _Span | N
     return max(spans, key=lambda s: (s.chars, s.start.index))
 
 
+def _ix_facts(blocks: list[Block]) -> list[dict[str, object]]:
+    return [
+        {
+            "block": i,
+            **{
+                k: getattr(f, k)
+                for k in ("name", "context", "unit", "scale", "decimals", "sign", "text")
+            },
+        }
+        for i, b in enumerate(blocks)
+        for f in b.ix
+    ]
+
+
 def _assemble(blocks: list[Block]) -> tuple[str, list[int], list[str]]:
     parts: list[str] = []
     starts: list[int] = []
@@ -329,6 +345,7 @@ def _section_from_blocks(
         detail=detail,
         block_starts=starts,
         block_kinds=kinds,
+        ix_facts=_ix_facts(blocks),
     )
 
 

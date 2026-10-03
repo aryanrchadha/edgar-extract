@@ -50,6 +50,7 @@ SECTION_COLUMNS = [
     "detail",
     "block_starts",
     "block_kinds",
+    "ix_facts",
 ]
 
 # Outlier rules for section_report.csv (only sections with status "ok").
@@ -98,6 +99,7 @@ def _section_row(filing: pd.Series, sec: Section) -> dict[str, object]:
         "detail": sec.detail,
         "block_starts": sec.block_starts,
         "block_kinds": kinds,
+        "ix_facts": sec.ix_facts,
     }
 
 
@@ -158,7 +160,8 @@ def section_report(sections: pd.DataFrame) -> pd.DataFrame:
       (median/MAD, scaled by 1.4826),
     * ``n_chars`` is more than 2x above or below the company's own median for that item.
     """
-    cols = [c for c in SECTION_COLUMNS if c not in ("text", "block_starts", "block_kinds")]
+    hidden = ("text", "block_starts", "block_kinds", "ix_facts")
+    cols = [c for c in SECTION_COLUMNS if c not in hidden]
     report = sections[cols].copy()
     report["outlier"] = False
     report["outlier_reason"] = ""
@@ -314,3 +317,121 @@ def run_extract_stage(
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False)
     return df
+
+
+# -- labeling preparation (M4) -----------------------------------------------------------
+
+
+def labels_dir(settings: Settings) -> Path:
+    """Committed label files live next to the config, outside the gitignored data dir."""
+    return settings.paths.reports_dir.parent / "labels"
+
+
+def silver_path(settings: Settings) -> Path:
+    return settings.paths.interim_dir / "silver.parquet"
+
+
+def load_all_facts(settings: Settings, client: EdgarClient, ciks: Sequence[int]) -> pd.DataFrame:
+    from edgar_extract.xbrl import load_company_facts
+
+    frames = []
+    skiplog = SkipLog(settings.paths.skip_log)
+    for cik in sorted(set(ciks)):
+        try:
+            frames.append(load_company_facts(client, int(cik)))
+        except EdgarError as exc:
+            skiplog.record("xbrl", "companyfacts unavailable", cik=int(cik), detail=str(exc))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def prepare_labeling(
+    settings: Settings, client: EdgarClient, *, force: bool = False
+) -> dict[str, object]:
+    """Build silver labels, measure inline-XBRL coverage, and write gold candidates once."""
+    from edgar_extract.ner.labeling import (
+        build_silver,
+        sample_gold_candidates,
+        silver_sentences,
+        write_jsonl,
+    )
+    from edgar_extract.xbrl import load_tag_map
+
+    extractions = pd.read_parquet(extractions_path(settings))
+    sections = load_sections(settings)
+    facts = load_all_facts(settings, client, extractions["cik"].unique().tolist())
+    silver = build_silver(extractions, sections, facts, load_tag_map())
+    silver.to_parquet(silver_path(settings), index=False)
+    sentences = silver_sentences(silver)
+    write_jsonl(settings.paths.interim_dir / "silver_sentences.jsonl", sentences)
+
+    write_ixbrl_coverage_report(settings, sections, silver)
+
+    candidates_file = labels_dir(settings) / "gold_candidates.jsonl"
+    gold_file = labels_dir(settings) / "gold_labels.jsonl"
+    if candidates_file.exists() and not force:
+        wrote_candidates = False
+    else:
+        if gold_file.exists() and gold_file.stat().st_size > 0:
+            raise RuntimeError(
+                f"{gold_file} already has labels; refusing to resample candidates under it"
+            )
+        write_jsonl(candidates_file, sample_gold_candidates(extractions))
+        wrote_candidates = True
+    labeled = silver["silver_role"].notna()
+    return {
+        "silver_spans": int(labeled.sum()),
+        "silver_sentences": len(sentences),
+        "silver_by_role": silver.loc[labeled, "silver_role"].value_counts().to_dict(),
+        "silver_by_source": silver.loc[labeled, "silver_source"].value_counts().to_dict(),
+        "candidates_file": str(candidates_file),
+        "wrote_candidates": wrote_candidates,
+    }
+
+
+def write_ixbrl_coverage_report(
+    settings: Settings, sections: pd.DataFrame, silver: pd.DataFrame
+) -> Path:
+    """reports/ixbrl_coverage.md: how much section prose is inline-XBRL tagged."""
+    ok = sections[sections["status"] == SectionStatus.OK.value]
+    usd = silver[silver["unit"] == "USD"]
+    lines = [
+        "# Inline XBRL coverage of section prose",
+        "",
+        "Question from the spec: before relying on inline XBRL (`ix:nonFraction`) spans as",
+        "silver labels, how much of the Item 7 (and Item 1A) prose is actually tagged?",
+        "",
+        "| item | sections | ix:nonFraction facts in section | of which in prose paragraphs "
+        "| prose $ mentions | prose $ mentions tagged | share tagged |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    from edgar_extract.numeric_spans import is_prose
+
+    for item in ("1A", "7"):
+        secs = ok[ok["item"] == item]
+        n_ix = n_ix_prose = 0
+        for r in secs.to_dict("records"):
+            starts = [int(x) for x in r["block_starts"]]
+            text = str(r["text"])
+            for f in r["ix_facts"]:
+                b = int(f["block"])
+                end = starts[b + 1] - 2 if b + 1 < len(starts) else len(text)
+                n_ix += 1
+                n_ix_prose += is_prose(text[starts[b] : end])
+        mentions = usd[usd["section"] == item]
+        tagged = int((mentions["silver_source"] == "ixbrl_tag").sum())
+        share = tagged / len(mentions) if len(mentions) else 0.0
+        lines.append(
+            f"| {item} | {len(secs)} | {n_ix} | {n_ix_prose} | {len(mentions)} | {tagged} "
+            f"| {share:.2%} |"
+        )
+    lines += [
+        "",
+        "Conclusion: inline XBRL tags almost no MD&A or Risk Factors prose; the tagged facts",
+        "sit in tables. Tagged prose mentions are still used as (high-precision) silver labels,",
+        "but the silver set is built mainly from XBRL value matches against the same filing's",
+        "companyfacts. Counts are regenerated by `edgar-extract label --prepare`.",
+    ]
+    path = settings.paths.reports_dir / "ixbrl_coverage.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+    return path

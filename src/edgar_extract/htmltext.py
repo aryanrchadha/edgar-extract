@@ -34,6 +34,7 @@ BLOCK_TAGS = frozenset(
 )  # fmt: skip
 SKIP_TAGS = frozenset({"script", "style", "head", "title", "noscript", "ix:header", "xml"})
 CELL_TAGS = frozenset({"td", "th"})
+IX_NUMERIC = "ix:nonfraction"
 
 _HIDDEN_RE = re.compile(r"display\s*:\s*none", re.I)
 _BREAK_BEFORE_RE = re.compile(r"(?:page-break-before\s*:\s*always|break-before\s*:\s*page)", re.I)
@@ -63,10 +64,24 @@ def normalize_text(text: str) -> str:
 
 
 @dataclass(frozen=True)
+class IxFact:
+    """An inline-XBRL numeric fact (``ix:nonFraction``) as displayed in the document."""
+
+    name: str  # concept, e.g. "us-gaap:Revenues"
+    context: str
+    unit: str
+    scale: int  # power of ten: 6 means the displayed number is in millions
+    decimals: str
+    sign: str  # "-" when the fact is negative but displayed without a sign
+    text: str  # displayed number, e.g. "1.2"
+
+
+@dataclass(frozen=True)
 class Block:
     kind: BlockKind
     text: str
     page: int = 0  # physical page (0-based), counted from CSS page breaks
+    ix: tuple[IxFact, ...] = ()  # inline-XBRL facts displayed inside this block
 
 
 def _tag(el: etree._Element) -> str:
@@ -88,6 +103,34 @@ def _skip(el: etree._Element) -> bool:
 
 def _has_nested_table(row: etree._Element) -> bool:
     return any(_tag(d) == "table" for d in row.iterdescendants())
+
+
+def _ix_fact(el: etree._Element) -> IxFact:
+    scale = el.get("scale") or "0"
+    return IxFact(
+        name=el.get("name") or "",
+        context=el.get("contextref") or "",
+        unit=el.get("unitref") or "",
+        scale=int(scale) if scale.lstrip("-").isdigit() else 0,
+        decimals=el.get("decimals") or "",
+        sign=el.get("sign") or "",
+        text=normalize_text(_inline_text(el)),
+    )
+
+
+def _row_ix_facts(row: etree._Element) -> tuple[IxFact, ...]:
+    facts: list[IxFact] = []
+
+    def walk(node: etree._Element) -> None:
+        if _skip(node):
+            return
+        if _tag(node) == IX_NUMERIC:
+            facts.append(_ix_fact(node))
+        for child in node:
+            walk(child)
+
+    walk(row)
+    return tuple(facts)
 
 
 def _inline_text(el: etree._Element) -> str:
@@ -117,13 +160,15 @@ class _Renderer:
     def __init__(self) -> None:
         self.blocks: list[Block] = []
         self.buf: list[str] = []
+        self.ix: list[IxFact] = []
         self.page = 0
 
     def flush(self) -> None:
         text = normalize_text("".join(self.buf))
         self.buf.clear()
         if text:
-            self.blocks.append(Block("p", text, self.page))
+            self.blocks.append(Block("p", text, self.page, tuple(self.ix)))
+        self.ix.clear()
 
     def page_break(self) -> None:
         self.flush()
@@ -144,8 +189,10 @@ class _Renderer:
             cells = [normalize_text(_inline_text(c)) for c in el if _tag(c) in CELL_TAGS]
             row = " ".join(c for c in cells if c)
             if row:
-                self.blocks.append(Block("table_row", row, self.page))
+                self.blocks.append(Block("table_row", row, self.page, _row_ix_facts(el)))
             return
+        if tag == IX_NUMERIC:
+            self.ix.append(_ix_fact(el))
         block = tag in BLOCK_TAGS
         if block:
             self.flush()

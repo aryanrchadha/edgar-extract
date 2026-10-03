@@ -232,6 +232,51 @@ def _print_extractions(df: pd.DataFrame, path: Path) -> None:
 
 
 @app.command()
+def label(
+    prepare: Annotated[
+        bool, typer.Option("--prepare", help="Build silver labels and the gold candidate sample")
+    ] = False,
+    status: Annotated[bool, typer.Option("--status", help="Show gold labeling progress")] = False,
+    labeler: Annotated[
+        str, typer.Option(help="Your name or initials, stored with each label")
+    ] = "",
+    target: Annotated[int, typer.Option(help="Number of sentences to aim for")] = 200,
+    force: Annotated[bool, typer.Option(help="Resample candidates (only before labeling)")] = False,
+    config: ConfigOpt = Path("config.yaml"),
+) -> None:
+    """Gold labeling tool: one keypress per candidate number. See labels/LABELING_GUIDE.md."""
+    import os
+
+    from edgar_extract.ner.labeling import gold_summary, read_jsonl, run_labeling
+    from edgar_extract.pipeline import labels_dir, prepare_labeling
+
+    settings = _load(config)
+    folder = labels_dir(settings)
+    gold_file = folder / "gold_labels.jsonl"
+    if prepare:
+        try:
+            client = EdgarClient.from_settings(settings)
+            info = prepare_labeling(settings, client, force=force)
+        except (FileNotFoundError, RuntimeError, EdgarError) as exc:
+            console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        for key, value in info.items():
+            console.print(f"{key}: {value}")
+        return
+    if status:
+        console.print(gold_summary(read_jsonl(gold_file)))
+        return
+    name = labeler or os.environ.get("USER", "unknown")
+    try:
+        run_labeling(folder / "gold_candidates.jsonl", gold_file, name, target=target)
+    except FileNotFoundError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    except KeyboardInterrupt:
+        console.print(f"\nstopped; progress is saved in {gold_file}")
+
+
+@app.command()
 def asof(
     ticker: Annotated[str, typer.Option(help="Ticker")],
     date: Annotated[str, typer.Option(help="As-of date, YYYY-MM-DD")],
