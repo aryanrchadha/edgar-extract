@@ -10,3 +10,11 @@ Real responses from sec.gov / data.sec.gov, recorded on 2026-10-03 by
 
 Values are never edited. Directory layout mirrors the URL (`<host>/<path>`) so the test
 session can serve them by URL.
+
+## Filing documents
+
+`www.sec.gov/Archives/.../*.htm.gz` are 20 complete 10-K primary documents (one per
+company in the default universe), stored gzip-compressed exactly as cached. They are listed
+in `tests/fixtures/filings.json`. `tests/fixtures/section_expectations.json` holds the
+reviewed section boundaries (start/end heading, first/last 60 characters) written by
+`scripts/freeze_section_expectations.py` after the boundaries were read and checked by hand.

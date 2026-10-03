@@ -15,6 +15,7 @@ from rich.table import Table
 
 from edgar_extract.config import ConfigError, Settings, load_settings
 from edgar_extract.edgar_client import EdgarClient, EdgarError
+from edgar_extract.pipeline import run_sections_stage, section_report_path, sections_path
 from edgar_extract.skiplog import SkipLog
 from edgar_extract.universe import STAGE as UNIVERSE_STAGE
 from edgar_extract.universe import build_universe
@@ -41,7 +42,6 @@ class Stage(StrEnum):
 
 # Stages land milestone by milestone; until then the CLI says so instead of pretending.
 _NOT_YET: dict[Stage, str] = {
-    Stage.sections: "M2",
     Stage.extract: "M3",
     Stage.xbrl: "M5",
     Stage.reconcile: "M5",
@@ -103,6 +103,23 @@ def run_universe_stage(settings: Settings, client: EdgarClient) -> pd.DataFrame:
     return df
 
 
+def _run_sections(settings: Settings, client: EdgarClient) -> None:
+    df = run_sections_stage(settings, client)
+    table = Table(title="Section isolation")
+    for col in ("item", "status", "method", "sections", "median chars"):
+        table.add_column(col)
+    grouped = df.groupby(["item", "status", "method"])["n_chars"]
+    for (item, status, method), n in grouped:
+        table.add_row(str(item), str(status), str(method), str(len(n)), f"{n.median():,.0f}")
+    console.print(table)
+    report = pd.read_csv(section_report_path(settings))
+    console.print(
+        f"wrote {len(df)} sections from {df['accession'].nunique()} filings to "
+        f"{sections_path(settings)}; {int(report['outlier'].sum())} outliers flagged in "
+        f"{section_report_path(settings)}"
+    )
+
+
 def _print_universe(df: pd.DataFrame) -> None:
     table = Table(title="10-K universe")
     for col in ("ticker", "fiscal year", "form", "accession", "filing date", "period end"):
@@ -140,14 +157,16 @@ def run(
         client = EdgarClient.from_settings(settings, offline=offline, refresh=refresh)
         if stage in (Stage.universe, Stage.all):
             run_universe_stage(settings, client)
+        if stage in (Stage.sections, Stage.all):
+            _run_sections(settings, client)
         if stage is Stage.all:
             console.print(
                 "[yellow]Later stages are not implemented yet; "
-                "ran the universe stage only.[/yellow]"
+                "ran the universe and sections stages.[/yellow]"
             )
         elif stage in _NOT_YET:
             raise _not_implemented(f"stage '{stage.value}'", _NOT_YET[stage])
-    except (ConfigError, EdgarError) as exc:
+    except (ConfigError, EdgarError, FileNotFoundError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(1) from exc
 

@@ -176,3 +176,9 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
   8-K12B on 2026-07-01). The universe builder now explains this case in the skip log.
   JPM needed 40 paginated history files to reach five 10-Ks (structured-note volume);
   pages are fetched lazily and cached.
+- **M2 done** (2026-10-03). 204 sections from 102 filings. Live data showed four layouts
+  beyond the textbook one: Exhibit 13 incorporation (WFC), an in-document page reference
+  (JPM), a Form 10-K cross-reference index (GE, INTC) and a named-section reference
+  (XOM). Each is handled by an explicit rule and covered by a synthetic test plus golden
+  checks on 20 recorded filings (one per company). Two AAPL Item 7s are flagged as short
+  outliers; that is genuine (Apple's MD&A is about 15k characters against a 68k median).

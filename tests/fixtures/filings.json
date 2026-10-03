@@ -1,0 +1,202 @@
+[
+ {
+  "ticker": "AAPL",
+  "cik": 320193,
+  "fiscal_year": 2025,
+  "form": "10-K",
+  "accession": "0000320193-25-000079",
+  "filing_date": "2025-10-31",
+  "primary_document": "aapl-20250927.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm"
+ },
+ {
+  "ticker": "MSFT",
+  "cik": 789019,
+  "fiscal_year": 2023,
+  "form": "10-K",
+  "accession": "0000950170-23-035122",
+  "filing_date": "2023-07-27",
+  "primary_document": "msft-20230630.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm"
+ },
+ {
+  "ticker": "AMZN",
+  "cik": 1018724,
+  "fiscal_year": 2021,
+  "form": "10-K",
+  "accession": "0001018724-22-000005",
+  "filing_date": "2022-02-04",
+  "primary_document": "amzn-20211231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/1018724/000101872422000005/amzn-20211231.htm"
+ },
+ {
+  "ticker": "GOOGL",
+  "cik": 1652044,
+  "fiscal_year": 2022,
+  "form": "10-K",
+  "accession": "0001652044-23-000016",
+  "filing_date": "2023-02-03",
+  "primary_document": "goog-20221231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204423000016/goog-20221231.htm"
+ },
+ {
+  "ticker": "META",
+  "cik": 1326801,
+  "fiscal_year": 2024,
+  "form": "10-K",
+  "accession": "0001326801-25-000017",
+  "filing_date": "2025-01-30",
+  "primary_document": "meta-20241231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/1326801/000132680125000017/meta-20241231.htm"
+ },
+ {
+  "ticker": "NVDA",
+  "cik": 1045810,
+  "fiscal_year": 2023,
+  "form": "10-K",
+  "accession": "0001045810-23-000017",
+  "filing_date": "2023-02-24",
+  "primary_document": "nvda-20230129.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/nvda-20230129.htm"
+ },
+ {
+  "ticker": "JPM",
+  "cik": 19617,
+  "fiscal_year": 2024,
+  "form": "10-K",
+  "accession": "0000019617-25-000270",
+  "filing_date": "2025-02-14",
+  "primary_document": "jpm-20241231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/19617/000001961725000270/jpm-20241231.htm"
+ },
+ {
+  "ticker": "WFC",
+  "cik": 72971,
+  "fiscal_year": 2024,
+  "form": "10-K",
+  "accession": "0000072971-25-000066",
+  "filing_date": "2025-02-25",
+  "primary_document": "wfc-20241231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/72971/000007297125000066/wfc-20241231.htm"
+ },
+ {
+  "ticker": "JNJ",
+  "cik": 200406,
+  "fiscal_year": 2022,
+  "form": "10-K",
+  "accession": "0000200406-23-000016",
+  "filing_date": "2023-02-16",
+  "primary_document": "jnj-20230101.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/200406/000020040623000016/jnj-20230101.htm"
+ },
+ {
+  "ticker": "PFE",
+  "cik": 78003,
+  "fiscal_year": 2025,
+  "form": "10-K",
+  "accession": "0000078003-26-000026",
+  "filing_date": "2026-02-26",
+  "primary_document": "pfe-20251231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/78003/000007800326000026/pfe-20251231.htm"
+ },
+ {
+  "ticker": "XOM",
+  "cik": 34088,
+  "fiscal_year": 2023,
+  "form": "10-K",
+  "accession": "0000034088-24-000018",
+  "filing_date": "2024-02-28",
+  "primary_document": "xom-20231231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/34088/000003408824000018/xom-20231231.htm"
+ },
+ {
+  "ticker": "WMT",
+  "cik": 104169,
+  "fiscal_year": 2026,
+  "form": "10-K",
+  "accession": "0000104169-26-000055",
+  "filing_date": "2026-03-13",
+  "primary_document": "wmt-20260131.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/104169/000010416926000055/wmt-20260131.htm"
+ },
+ {
+  "ticker": "PG",
+  "cik": 80424,
+  "fiscal_year": 2022,
+  "form": "10-K",
+  "accession": "0000080424-22-000064",
+  "filing_date": "2022-08-05",
+  "primary_document": "pg-20220630.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/80424/000008042422000064/pg-20220630.htm"
+ },
+ {
+  "ticker": "KO",
+  "cik": 21344,
+  "fiscal_year": 2021,
+  "form": "10-K",
+  "accession": "0000021344-22-000009",
+  "filing_date": "2022-02-22",
+  "primary_document": "ko-20211231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/21344/000002134422000009/ko-20211231.htm"
+ },
+ {
+  "ticker": "INTC",
+  "cik": 50863,
+  "fiscal_year": 2024,
+  "form": "10-K",
+  "accession": "0000050863-25-000009",
+  "filing_date": "2025-01-31",
+  "primary_document": "intc-20241228.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/50863/000005086325000009/intc-20241228.htm"
+ },
+ {
+  "ticker": "GE",
+  "cik": 40545,
+  "fiscal_year": 2025,
+  "form": "10-K",
+  "accession": "0000040545-26-000008",
+  "filing_date": "2026-01-29",
+  "primary_document": "ge-20251231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/40545/000004054526000008/ge-20251231.htm"
+ },
+ {
+  "ticker": "BA",
+  "cik": 12927,
+  "fiscal_year": 2022,
+  "form": "10-K",
+  "accession": "0000012927-23-000007",
+  "filing_date": "2023-01-27",
+  "primary_document": "ba-20221231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/12927/000001292723000007/ba-20221231.htm"
+ },
+ {
+  "ticker": "CAT",
+  "cik": 18230,
+  "fiscal_year": 2023,
+  "form": "10-K",
+  "accession": "0000018230-24-000009",
+  "filing_date": "2024-02-16",
+  "primary_document": "cat-20231231.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/18230/000001823024000009/cat-20231231.htm"
+ },
+ {
+  "ticker": "DIS",
+  "cik": 1744489,
+  "fiscal_year": 2022,
+  "form": "10-K/A",
+  "accession": "0001193125-23-014219",
+  "filing_date": "2023-01-24",
+  "primary_document": "d431948d10ka.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/1744489/000119312523014219/d431948d10ka.htm"
+ },
+ {
+  "ticker": "KHC",
+  "cik": 1637459,
+  "fiscal_year": 2025,
+  "form": "10-K",
+  "accession": "0001637459-26-000009",
+  "filing_date": "2026-02-12",
+  "primary_document": "khc-20251227.htm",
+  "url": "https://www.sec.gov/Archives/edgar/data/1637459/000163745926000009/khc-20251227.htm"
+ }
+]

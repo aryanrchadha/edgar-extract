@@ -67,3 +67,25 @@ def test_bad_config_exits_cleanly(tmp_path: Path) -> None:
     result = runner.invoke(cli.app, ["run", "--config", str(tmp_path / "missing.yaml")])
     assert result.exit_code == 2
     assert "config error" in result.output
+
+
+def test_sections_stage_writes_parquet_report_and_logs_skips(
+    config_path: Path, patched_client: None
+) -> None:
+    result = runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "all"])
+    assert result.exit_code == 0, result.output
+    interim = config_path.parent / "data" / "interim"
+    sections = pd.read_parquet(interim / "sections.parquet")
+    # Only AAPL FY2025 and XOM FY2023 documents are recorded fixtures.
+    assert set(zip(sections["ticker"], sections["fiscal_year"], strict=True)) == {
+        ("AAPL", 2025),
+        ("XOM", 2023),
+    }
+    xom7 = sections[(sections["ticker"] == "XOM") & (sections["item"] == "7")].iloc[0]
+    assert xom7["status"] == "ok" and xom7["method"] == "named_section_reference"
+    report = pd.read_csv(config_path.parent / "reports" / "section_report.csv")
+    assert len(report) == 4 and "outlier" in report.columns
+    skips = SkipLog.read(interim / "skipped.jsonl")
+    unavailable = [s for s in skips if s.reason == "filing document unavailable"]
+    assert len(unavailable) == 8  # 10 filings in the universe, 2 recorded
+    assert all(s.stage == "sections" and s.accession for s in unavailable)

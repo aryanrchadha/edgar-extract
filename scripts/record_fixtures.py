@@ -12,9 +12,12 @@ other rows. Nothing is edited or synthesized.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+
+import pandas as pd
 
 from edgar_extract.config import load_settings
 from edgar_extract.edgar_client import (
@@ -32,6 +35,31 @@ OUT = ROOT / "tests" / "fixtures" / "sec"
 SUBMISSION_CIKS = [320193, 1326801, 72971, 1744489, 200406, 34088, 2115436]
 TICKERS = {"AAPL", "META", "WFC", "DIS", "JNJ", "XOM", "GOOGL", "GOOG", "MSFT"}
 KEEP_OTHER_ROWS = 3
+
+# Filing documents copied verbatim (gzip, as cached) for section-isolation tests: one per
+# company, chosen to cover every layout the isolator handles.
+FILINGS = [
+    ("AAPL", 2025, "10-K"),
+    ("MSFT", 2023, "10-K"),  # running "Item 7" page headers; combined "Item 1B, 2, 3, 4"
+    ("AMZN", 2021, "10-K"),
+    ("GOOGL", 2022, "10-K"),  # "ITEM 1A.RISK FACTORS" without a space
+    ("META", 2024, "10-K"),
+    ("NVDA", 2023, "10-K"),
+    ("JPM", 2024, "10-K"),  # Item 7 -> "appears on pages 52-167"
+    ("WFC", 2024, "10-K"),  # Items 1A and 7 incorporated by reference (Annual Report)
+    ("JNJ", 2022, "10-K"),
+    ("PFE", 2025, "10-K"),  # Item 1A ends at Item 1C
+    ("XOM", 2023, "10-K"),  # Item 7 -> 'section entitled "..." in the Financial Section'
+    ("WMT", 2026, "10-K"),
+    ("PG", 2022, "10-K"),
+    ("KO", 2021, "10-K"),
+    ("INTC", 2024, "10-K"),  # Form 10-K cross-reference index
+    ("GE", 2025, "10-K"),  # Form 10-K cross-reference index
+    ("BA", 2022, "10-K"),
+    ("CAT", 2023, "10-K"),
+    ("DIS", 2022, "10-K/A"),  # Part III amendment: no Item 1A / 7
+    ("KHC", 2025, "10-K"),
+]
 
 
 def trim_columnar(block: dict[str, Any]) -> dict[str, Any]:
@@ -69,6 +97,36 @@ def main() -> None:
             url = submissions_page_url(page["name"])
             if client.is_cached(url):
                 write(url, trim_columnar(client.submissions_page(page["name"])))
+
+    universe = pd.read_parquet(settings.paths.universe_parquet)
+    manifest = []
+    for ticker, fy, form in FILINGS:
+        row = universe[
+            (universe["ticker"] == ticker)
+            & (universe["fiscal_year"] == fy)
+            & (universe["form"] == form)
+        ].iloc[0]
+        url = str(row["primary_doc_url"])
+        client.get_bytes(url)  # ensure cached
+        src = client.cache.path_for(url)
+        parts = urlsplit(url)
+        dest = OUT / parts.netloc / f"{parts.path.lstrip('/')}.gz"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+        print(f"copied {dest.relative_to(ROOT)} ({dest.stat().st_size:,} bytes)")
+        manifest.append(
+            {
+                "ticker": ticker,
+                "cik": int(row["cik"]),
+                "fiscal_year": fy,
+                "form": form,
+                "accession": str(row["accession"]),
+                "filing_date": str(row["filing_date"].date()),
+                "primary_document": str(row["primary_document"]),
+                "url": url,
+            }
+        )
+    (ROOT / "tests" / "fixtures" / "filings.json").write_text(json.dumps(manifest, indent=1) + "\n")
 
 
 if __name__ == "__main__":

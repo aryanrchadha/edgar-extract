@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gzip
+import json
 import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -38,6 +40,22 @@ def make_response(
     return resp
 
 
+def fixture_bytes(url: str, root: Path = SEC_FIXTURES) -> bytes | None:
+    """Recorded body for ``url``: ``<root>/<host>/<path>``, or the same path + ``.gz``."""
+    parts = urlsplit(url)
+    path = root / parts.netloc / parts.path.lstrip("/")
+    if path.is_file():
+        return path.read_bytes()
+    gz = path.with_name(path.name + ".gz")
+    if gz.is_file():
+        return gzip.decompress(gz.read_bytes())
+    return None
+
+
+def fixture_filings() -> list[dict[str, Any]]:
+    return list(json.loads((FIXTURES / "filings.json").read_text()))
+
+
 class FixtureSession(requests.Session):
     """A ``requests.Session`` that answers from recorded files or scripted responses.
 
@@ -61,10 +79,9 @@ class FixtureSession(requests.Session):
             if isinstance(item, Exception):
                 raise item
             return item
-        parts = urlsplit(url)
-        path = self.root / parts.netloc / parts.path.lstrip("/")
-        if path.is_file():
-            return make_response(url, 200, path.read_bytes())
+        body = fixture_bytes(url, self.root)
+        if body is not None:
+            return make_response(url, 200, body)
         return make_response(url, 404, b"not found")
 
     def urls(self) -> list[str]:
