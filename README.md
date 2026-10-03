@@ -361,7 +361,7 @@ tests/             offline tests; fixtures are trimmed real SEC responses
 ## Development
 
 ```bash
-uv run pytest                                   # ~300 tests, offline: sockets are blocked
+uv run pytest                                   # 278 tests, offline: sockets are blocked
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src                                 # strict
 ```
