@@ -520,3 +520,27 @@ def run_reconcile_stage(settings: Settings, extractions_name: str = "extractions
     )
     result.to_parquet(paths["reconciliation"], index=False)
     return result
+
+
+# -- point-in-time database (M6) -----------------------------------------------------------
+
+
+def run_pit_stage(settings: Settings) -> dict[str, int]:
+    """Build or extend data/pit.duckdb from canonical XBRL facts and reconciled text values."""
+    from edgar_extract.pit_db import build_pit_db
+
+    paths = xbrl_paths(settings)
+    if not paths["canonical"].is_file():
+        raise FileNotFoundError(
+            f"{paths['canonical']} not found; run `edgar-extract run --stage xbrl`"
+        )
+    universe = load_universe(settings)
+    companies = (
+        universe[["cik", "ticker", "company_name"]]
+        .drop_duplicates("cik")
+        .rename(columns={"company_name": "name"})
+    )
+    reconciliations = [pd.read_parquet(p) for p in [paths["reconciliation"]] if p.is_file()]
+    return build_pit_db(
+        settings.paths.pit_db, pd.read_parquet(paths["canonical"]), companies, reconciliations
+    )

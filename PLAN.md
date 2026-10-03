@@ -201,3 +201,7 @@ fine-tuned on CPU/MPS. Cased matters for financial text ("Services" as a segment
   - Cause rules guard against chance matches (the first versions fired on coincidences).
   - Unit tests caught a year-regex bug ("in 2023," was missed).
   - Audit of 25 random mismatches: 20 correct (80%), reviewed by Claude, not the user.
+- **M6 done** (2026-10-03). DuckDB PIT store: 83,666 append-only rows; idempotent
+  rebuilds. Invariants (a)-(d) pass on synthetic data and on the real JNJ (Kenvue) and GE
+  (3-version) restatements recorded as fixtures; the Hypothesis property test (150 cases)
+  never violates (d). `asof` CLI shows the look-ahead gap next to each value.

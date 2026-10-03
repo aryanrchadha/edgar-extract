@@ -23,6 +23,7 @@ from edgar_extract.config import load_settings
 from edgar_extract.edgar_client import (
     COMPANY_TICKERS_URL,
     EdgarClient,
+    companyfacts_url,
     submissions_page_url,
     submissions_url,
 )
@@ -35,6 +36,19 @@ OUT = ROOT / "tests" / "fixtures" / "sec"
 SUBMISSION_CIKS = [320193, 1326801, 72971, 1744489, 200406, 34088, 2115436]
 TICKERS = {"AAPL", "META", "WFC", "DIS", "JNJ", "XOM", "GOOGL", "GOOG", "MSFT"}
 KEEP_OTHER_ROWS = 3
+
+# companyfacts for companies with known restatements (JNJ: Kenvue separation; GE: GE
+# HealthCare and GE Vernova spin-offs), trimmed to a few concepts and FY2019+ periods.
+COMPANYFACTS_CIKS = [200406, 40545]
+COMPANYFACTS_TAGS = {
+    "us-gaap": {
+        "Revenues",
+        "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "NetIncomeLoss",
+        "Assets",
+    }
+}
+COMPANYFACTS_MIN_END = "2019-01-01"
 
 # Filing documents copied verbatim (gzip, as cached) for section-isolation tests: one per
 # company, chosen to cover every layout the isolator handles.
@@ -97,6 +111,23 @@ def main() -> None:
             url = submissions_page_url(page["name"])
             if client.is_cached(url):
                 write(url, trim_columnar(client.submissions_page(page["name"])))
+
+    for cik in COMPANYFACTS_CIKS:
+        payload = client.company_facts(cik)
+        trimmed: dict[str, Any] = {k: v for k, v in payload.items() if k != "facts"}
+        trimmed["facts"] = {}
+        for taxonomy, concepts in COMPANYFACTS_TAGS.items():
+            trimmed["facts"][taxonomy] = {}
+            for concept in sorted(concepts):
+                body = payload["facts"].get(taxonomy, {}).get(concept)
+                if body is None:
+                    continue
+                units = {
+                    unit: [f for f in facts if f.get("end", "") >= COMPANYFACTS_MIN_END]
+                    for unit, facts in body["units"].items()
+                }
+                trimmed["facts"][taxonomy][concept] = {**body, "units": units}
+        write(companyfacts_url(cik), trimmed)
 
     universe = pd.read_parquet(settings.paths.universe_parquet)
     manifest = []

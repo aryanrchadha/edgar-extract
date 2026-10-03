@@ -58,7 +58,7 @@ def test_rerun_does_not_duplicate_skip_log(config_path: Path, patched_client: No
 
 
 def test_unimplemented_stage_says_so(config_path: Path, patched_client: None) -> None:
-    result = runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "pit"])
+    result = runner.invoke(cli.app, ["run", "--config", str(config_path), "--stage", "qa"])
     assert result.exit_code == 2
     assert "not implemented yet" in result.output
 
@@ -126,3 +126,43 @@ def test_xbrl_and_reconcile_stages_survive_missing_companyfacts(
     assert any(s.stage == "xbrl" and s.reason == "companyfacts unavailable" for s in skips)
     rec = pd.read_parquet(interim / "reconciliation.parquet")
     assert set(rec["status"]) <= {"NO_XBRL_COUNTERPART"}
+
+
+def _pit_from_fixtures(config_path: Path) -> None:
+    import json
+
+    from edgar_extract.config import load_settings
+    from edgar_extract.pit_db import build_pit_db
+    from edgar_extract.xbrl import canonicalize, flatten_company_facts, load_tag_map
+
+    from .conftest import SEC_FIXTURES
+
+    path = SEC_FIXTURES / "data.sec.gov" / "api" / "xbrl" / "companyfacts" / "CIK0000040545.json"
+    canonical = canonicalize(flatten_company_facts(json.loads(path.read_text())), load_tag_map())
+    companies = pd.DataFrame([{"cik": 40545, "ticker": "GE", "name": "General Electric"}])
+    build_pit_db(load_settings(config_path).paths.pit_db, canonical, companies)
+
+
+def test_asof_command_shows_lookahead_gap(config_path: Path) -> None:
+    _pit_from_fixtures(config_path)
+    args = ["asof", "--ticker", "GE", "--date", "2023-03-01", "--field", "Revenues"]
+    result = runner.invoke(cli.app, [*args, "--config", str(config_path)])
+    assert result.exit_code == 0, result.output
+    assert "76,555,000,000" in result.output  # FY2022 as first reported
+    assert "29,139,000,000" in result.output  # latest restated value
+    assert "-61.9%" in result.output
+
+
+def test_asof_before_any_filing_and_unknown_field(config_path: Path) -> None:
+    _pit_from_fixtures(config_path)
+    base = ["asof", "--ticker", "GE", "--config", str(config_path)]
+    early = runner.invoke(cli.app, [*base, "--date", "2015-01-01", "--field", "Revenues"])
+    assert early.exit_code == 0 and "No Revenues for GE was filed" in early.output
+    bad = runner.invoke(cli.app, [*base, "--date", "2023-03-01", "--field", "Revnue"])
+    assert bad.exit_code == 2 and "unknown field" in bad.output
+
+
+def test_asof_without_database(config_path: Path) -> None:
+    args = ["asof", "--ticker", "GE", "--date", "2023-03-01", "--field", "Revenues"]
+    result = runner.invoke(cli.app, [*args, "--config", str(config_path)])
+    assert result.exit_code == 1 and "run --stage pit" in result.output

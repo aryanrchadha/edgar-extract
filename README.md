@@ -5,10 +5,9 @@ Factors (Item 1A), extracts numeric entities from the prose, reconciles them aga
 and stores the result in a **point-in-time (PIT) fundamentals database**: a query "as of
 date D" returns only what was knowable on D.
 
-> Status: **M1-M3 and M5 complete; M4 code complete, waiting for gold labels**
-> (SEC client, universe, section isolation, regex baseline, XBRL reconciliation). The
-> NER model is trained and scored only after a person labels the gold set (see
-> "Labeling"). Later stages
+> Status: **M1-M3, M5 and M6 complete; M4 code complete, waiting for gold labels.** The
+> point-in-time database is built and tested. The NER model is trained and scored only
+> after a person labels the gold set (see "Labeling"). Later stages
 > print "not implemented yet" instead of producing output. See [PLAN.md](PLAN.md) for the
 > design, risks and milestone status.
 
@@ -86,9 +85,13 @@ uv run edgar-extract run --stage xbrl        # companyfacts + inline-XBRL facts 
 uv run edgar-extract run --stage reconcile   # -> reconciliation.parquet
 ```
 
-Stage commands that land in later milestones (`asof`, `dashboard`, and
-`run --stage pit|qa`) currently exit non-zero with a message saying which milestone
-implements them.
+```bash
+uv run edgar-extract run --stage pit                                   # -> data/pit.duckdb
+uv run edgar-extract asof --ticker GE --date 2023-03-01 --field Revenues
+```
+
+Stage commands that land in later milestones (`dashboard`, `run --stage qa`) currently
+exit non-zero with a message saying which milestone implements them.
 
 ## SEC access
 
@@ -184,6 +187,59 @@ how often each rule fired, not accuracy; accuracy is measured against gold label
 | RD_EXPENSE | 12 | 100 |
 | RESTATED_PRIOR | 0 | 3 |
 | OTHER_NUMERIC | 477 | 14,340 |
+
+## Point-in-time database (M6): the importable API
+
+```python
+from edgar_extract.pit_db import PointInTimeDB
+
+pit = PointInTimeDB("data/pit.duckdb", read_only=True)
+pit.as_of("2022-03-01", tickers=["AAPL", "GE"], fields=["Revenues", "Assets"])
+pit.history("GE", "Revenues")                     # every version, restatements included
+pit.latest_vs_asof("GE", "Revenues", "2023-03-01")  # the look-ahead gap per period
+pit.restatements(fields=["Revenues"])             # periods whose value changed later
+```
+
+- **Keys are dates, never fiscal labels.** Rows are keyed by `(cik, canonical_field,
+  period_start, period_end, filing_date, accession)` plus `source`, `extractor` and the
+  text span. `period_start` is an addition to the spec's key: without it, a fiscal-year
+  figure and the Q4 figure ending the same day collide. It is NULL for balance-sheet
+  instants.
+- **Append-only.** Every report of a value is its own row, including each comparative
+  re-reported in a later 10-K and every restated value. The class has no method that
+  updates or deletes. Rebuilding is idempotent: rows are identified by a hash of their key
+  columns, and re-ingesting inserts nothing.
+- **Knowable on D** means `filing_date <= D`. EDGAR's filing date already moves
+  after-hours acceptances to the next business day; `lag_days=1` adds a day for backtests
+  that trade on D.
+- **`as_of(D)`** returns, per (company, field, period), the row with the latest
+  `filing_date <= D`; ties go to the later accession, then XBRL over text. Defaults suit
+  screeners: annual and instant periods, XBRL values only. With `sources=("xbrl", "text")`,
+  text values are included as well, excluding rows reconciliation classified
+  `EXTRACTION_ERROR`.
+- **Columns:** `value_usd`, `unit`, `source` (`xbrl` or `text`), `extractor`,
+  `confidence`, `mismatch_cause`, `xbrl_tag`, and lineage. Lineage is the filing index URL
+  for XBRL rows; for text rows it is the document URL, section, character span and
+  sentence. `confidence` is 1.0 for XBRL. For text rows it is the model probability (NER)
+  or NULL for the regex extractor, which has no calibrated score.
+
+Built from the default universe: **83,666 rows**, made up of 81,697 XBRL facts across 26
+canonical fields and every filing that reported them, plus 1,969 reconciled text values.
+**125 (company, field, fiscal period) values since 2020 changed after first being
+reported.** Examples:
+- GE FY2022 revenue: $76.6B as first reported (filed 2023-02-10), then $58.1B after the
+  GE HealthCare spin-off, then $29.1B after GE Vernova (-62%).
+- JNJ FY2022 revenue: $94.9B, then $80.0B after the Kenvue separation.
+
+The four required invariants are tested on synthetic data **and** on these real JNJ and
+GE restatements:
+- (a) a query before a restatement returns the original value;
+- (b) a query after it returns the restated value;
+- (c) a query before the original filing returns nothing;
+- (d) no result ever has `filing_date > date`.
+
+A Hypothesis property test checks (d), plus agreement with a brute-force recomputation,
+for 150 random dates, field sets, tickers and lags.
 
 ## Labeling and the NER model (M4)
 
@@ -314,6 +370,9 @@ Collected here as milestones land.
   NO_XBRL_COUNTERPART or fall into EXTRACTION_ERROR. Concepts outside `tag_map.yaml`
   (e.g. `OtherCostAndExpenseOperating`) and text that sums several facts are taxonomy
   gaps, not extraction errors (see the audit).
+- **The PIT DB is keyed by CIK**, and companyfacts is a snapshot that SEC updates in place.
+  A fact SEC removed from companyfacts, which is rare, would be missing from a rebuild,
+  although rows already ingested stay.
 - **The segment rule trades recall for precision.** A coarse number must be
   corroborated by the segment's name in the sentence, so amounts named only in a section
   heading are missed.

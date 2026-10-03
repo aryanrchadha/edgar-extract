@@ -18,6 +18,7 @@ from edgar_extract.edgar_client import EdgarClient, EdgarError
 from edgar_extract.pipeline import (
     extractions_path,
     run_extract_stage,
+    run_pit_stage,
     run_reconcile_stage,
     run_sections_stage,
     run_xbrl_stage,
@@ -50,7 +51,6 @@ class Stage(StrEnum):
 
 # Stages land milestone by milestone; until then the CLI says so instead of pretending.
 _NOT_YET: dict[Stage, str] = {
-    Stage.pit: "M6",
     Stage.qa: "M7",
 }
 
@@ -171,10 +171,12 @@ def run(
             console.print(f"xbrl: {counts}")
         if stage in (Stage.reconcile, Stage.all):
             _print_reconciliation(run_reconcile_stage(settings))
+        if stage in (Stage.pit, Stage.all):
+            console.print(f"pit: {run_pit_stage(settings)} -> {settings.paths.pit_db}")
         if stage is Stage.all:
             console.print(
                 "[yellow]Later stages are not implemented yet; "
-                "ran universe, sections, extract, xbrl and reconcile.[/yellow]"
+                "ran universe, sections, extract, xbrl, reconcile and pit.[/yellow]"
             )
         elif stage in _NOT_YET:
             raise _not_implemented(f"stage '{stage.value}'", _NOT_YET[stage])
@@ -340,10 +342,58 @@ def asof(
     ticker: Annotated[str, typer.Option(help="Ticker")],
     date: Annotated[str, typer.Option(help="As-of date, YYYY-MM-DD")],
     field: Annotated[str, typer.Option(help="Canonical field, e.g. Revenues")],
+    include_text: Annotated[
+        bool, typer.Option(help="Also consider text-extracted values (XBRL wins ties)")
+    ] = False,
+    lag_days: Annotated[int, typer.Option(help="Extra days before a filing counts")] = 0,
     config: ConfigOpt = Path("config.yaml"),
 ) -> None:
-    """Show what was knowable about a field on a given date."""
-    raise _not_implemented("asof", "M6")
+    """Show what was knowable about a field on a date, next to today's latest value."""
+    from edgar_extract.pit_db import PointInTimeDB
+
+    settings = _load(config)
+    try:
+        pit = PointInTimeDB(settings.paths.pit_db, read_only=True)
+    except FileNotFoundError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    with pit:
+        if field not in pit.fields():
+            console.print(f"[red]unknown field {field!r}.[/red] Fields: {', '.join(pit.fields())}")
+            raise typer.Exit(2)
+        sources = ("xbrl", "text") if include_text else ("xbrl",)
+        known = pit.as_of(date, [ticker], [field], sources=sources, lag_days=lag_days)
+        gap = pit.latest_vs_asof(ticker, field, date)
+    if known.empty:
+        console.print(f"No {field} for {ticker.upper()} was filed on or before {date}.")
+        raise typer.Exit(0)
+    table = Table(title=f"{ticker.upper()} {field} as knowable on {date}")
+    for col in (
+        "period",
+        "value (as of)",
+        "filed",
+        "accession",
+        "form",
+        "source",
+        "latest today",
+        "change",
+    ):
+        table.add_column(col, no_wrap=True)
+    latest = {(r["period_start"], r["period_end"]): r for r in gap.to_dict("records")}
+    for r in known.to_dict("records"):
+        start = (
+            "" if pd.isna(r["period_start"]) else f"{pd.Timestamp(r['period_start']).date()} to "
+        )
+        period = f"{start}{pd.Timestamp(r['period_end']).date()}"
+        g = latest.get((r["period_start"], r["period_end"]))
+        later = "" if g is None or pd.isna(g["latest_value"]) else f"{g['latest_value']:,.0f}"
+        change = "" if g is None or not g["restated_since"] else f"{g['rel_change']:+.1%}"
+        table.add_row(
+            period, f"{r['value_usd']:,.0f}", str(pd.Timestamp(r["filing_date"]).date()),
+            str(r["accession"]), str(r["form"]), str(r["source"]), later, change,
+        )  # fmt: skip
+    console.print(table)
+    console.print("[dim]'latest today' is what a backtest using current data would see.[/dim]")
 
 
 @app.command()
