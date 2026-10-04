@@ -262,3 +262,36 @@ def test_repo_candidates_file_is_well_formed() -> None:
         for sp in r["spans"]:
             assert r["sentence"][sp["start"] : sp["end"]] == sp["raw_text"]
     assert json.dumps(rows[0])  # serializable
+
+
+def test_line_mode_reader_takes_first_letter(monkeypatch: pytest.MonkeyPatch) -> None:
+    from edgar_extract.ner import labeling
+
+    answers = iter(["  R  ", "", "other"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert [labeling.read_line_key() for _ in range(3)] == ["r", "", "o"]
+
+
+def test_non_tty_stdin_falls_back_to_line_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
+    from edgar_extract.ner import labeling
+
+    monkeypatch.setattr("sys.stdin", io.StringIO("r\n"))
+    assert labeling.pick_key_reader() is labeling.read_line_key
+    assert labeling.pick_key_reader(line_mode=True) is labeling.read_line_key
+
+
+def test_line_mode_session_saves_labels(
+    candidates: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from edgar_extract.ner import labeling
+
+    answers = iter(["r", "o", "q"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    out = tmp_path / "gold.jsonl"
+    saved = run_labeling(
+        candidates, out, "tester", key_reader=labeling.read_line_key, printer=lambda s: None
+    )
+    assert saved == 1
+    assert [sp["label"] for sp in read_jsonl(out)[0]["spans"]] == ["REVENUE", "OTHER_NUMERIC"]

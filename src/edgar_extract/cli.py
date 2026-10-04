@@ -253,12 +253,25 @@ def label(
     ] = "",
     target: Annotated[int, typer.Option(help="Number of sentences to aim for")] = 200,
     force: Annotated[bool, typer.Option(help="Resample candidates (only before labeling)")] = False,
+    line_mode: Annotated[
+        bool,
+        typer.Option(
+            "--line-mode",
+            help="Type the key and press Enter (for terminals that don't pass single keys)",
+        ),
+    ] = False,
     config: ConfigOpt = Path("config.yaml"),
 ) -> None:
     """Gold labeling tool: one keypress per candidate number. See labels/LABELING_GUIDE.md."""
     import os
 
-    from edgar_extract.ner.labeling import gold_summary, read_jsonl, run_labeling
+    from edgar_extract.ner.labeling import (
+        gold_summary,
+        pick_key_reader,
+        read_jsonl,
+        read_line_key,
+        run_labeling,
+    )
     from edgar_extract.pipeline import labels_dir, prepare_labeling
 
     settings = _load(config)
@@ -279,7 +292,14 @@ def label(
         return
     name = labeler or os.environ.get("USER", "unknown")
     try:
-        run_labeling(folder / "gold_candidates.jsonl", gold_file, name, target=target)
+        reader = pick_key_reader(line_mode)
+        if reader is read_line_key:
+            console.print("[dim]line mode: type the key and press Enter[/dim]")
+        run_labeling(
+            folder / "gold_candidates.jsonl", gold_file, name, target=target, key_reader=reader
+        )
+    except EOFError:
+        console.print(f"\ninput closed; progress is saved in {gold_file}")
     except FileNotFoundError as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(1) from exc

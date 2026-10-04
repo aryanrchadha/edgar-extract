@@ -332,7 +332,28 @@ def read_key() -> str:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
     if ch == "\x03":  # Ctrl-C
         raise KeyboardInterrupt
+    if ch == "":
+        raise EOFError("stdin closed")
     return ch
+
+
+def read_line_key(prompt: str = "key + Enter> ") -> str:
+    """Line-mode fallback: type the letter and press Enter (works in any terminal)."""
+    line = input(prompt).strip().lower()
+    return line[:1]
+
+
+def pick_key_reader(line_mode: bool = False) -> Callable[[], str]:
+    """Single-keypress reading when the terminal supports it, otherwise line mode."""
+    if line_mode or not sys.stdin.isatty():
+        return read_line_key
+    try:
+        import termios
+
+        termios.tcgetattr(sys.stdin.fileno())
+    except (ImportError, OSError, termios.error):
+        return read_line_key
+    return read_key
 
 
 HELP = (
