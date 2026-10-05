@@ -14,8 +14,16 @@ For each extraction with a specific role, the steps are:
    on or before that filing's date. Nothing filed later is ever used for the comparison.
 4. **Status.** ``MATCH`` when |text| and |fact| agree within the text's rounding (half a
    unit of the last displayed digit), else ``MISMATCH``. ``NO_XBRL_COUNTERPART`` when
-   there is no field, no fact for the period, or the figure is forward-looking, a change
-   amount, or a percentage.
+   there is no field, no fact for the period, or the figure is forward-looking or a
+   percentage.
+
+**Change amounts** ("revenue increased $1.0 billion", ``numeric_kind="delta"``) are
+compared with fact(t) - fact(t-1), both as reported in the same filing
+(``comparison="change"``). "compared to 2023" / "from 2023" names the base year, so t is
+2024. A change mismatch is classified by restatement (the change computed with another
+version of either year), segment (the same member's change, corroborated like levels), then
+scale/rounding, else extraction error. The detail notes when the "change" equals a
+year's level. Non-GAAP adjustments are not assessed for changes.
 
 Every MISMATCH gets exactly one cause; the first rule that fires wins:
 
@@ -151,6 +159,28 @@ def _clause_bounds(sentence: str, start: int, end: int) -> tuple[int, int]:
     left = max(sentence.rfind(";", 0, start), sentence.rfind(":", 0, start)) + 1
     right_candidates = [i for i in (sentence.find(";", end), sentence.find(":", end)) if i >= 0]
     return left, min(right_candidates) if right_candidates else len(sentence)
+
+
+_BASE_YEAR_RE = re.compile(
+    r"(?:compared\s+(?:to|with)|from|versus|vs\.?|over|relative\s+to)\s+"
+    r"(?:the\s+)?(?:fiscal\s+(?:year\s+)?|FY\s?)?((?:19|20)\d{2})(?!\d)",
+    re.I,
+)
+
+
+def change_period(
+    sentence: str, start: int, end: int, current_fy: int, usd_spans: Sequence[tuple[int, int]]
+) -> Period:
+    """Fiscal year *t* of a change amount, where the change is fact(t) - fact(t-1).
+
+    "increased $1.0 billion compared to 2023" names the base year, so t = 2024; otherwise
+    the year is read as for a level ("increased $1.0 billion in 2024").
+    """
+    left, right = _clause_bounds(sentence, start, end)
+    base = _BASE_YEAR_RE.search(sentence[left:right])
+    if base:
+        return Period(int(base.group(1)) + 1, "base_year")
+    return mention_period(sentence, start, end, current_fy, usd_spans)
 
 
 def mention_period(
@@ -351,7 +381,7 @@ class Reconciler:
             "period_start": pd.NaT, "period_end": pd.NaT, "xbrl_tag": None,
             "xbrl_value": None, "xbrl_accession": None, "xbrl_filed": pd.NaT,
             "status": Status.NO_XBRL_COUNTERPART.value, "mismatch_cause": None,
-            "cause_detail": "", "abs_diff": None, "rel_diff": None,
+            "cause_detail": "", "abs_diff": None, "rel_diff": None, "comparison": "level",
         }  # fmt: skip
         role = str(row["role"])
         sentence = str(row["sentence"])
@@ -360,8 +390,8 @@ class Reconciler:
         if role == "GUIDANCE":
             out["cause_detail"] = "forward-looking figure"
             return out
-        if row["unit"] != "USD" or row["numeric_kind"] != "level":
-            out["cause_detail"] = f"not a dollar level ({row['unit']}, {row['numeric_kind']})"
+        if row["unit"] != "USD" or row["numeric_kind"] not in ("level", "delta"):
+            out["cause_detail"] = f"not a dollar amount ({row['unit']}, {row['numeric_kind']})"
             return out
         if _SUB_ANNUAL_RE.search(sentence):
             out["cause_detail"] = "sub-annual figure; only annual facts are compared"
@@ -371,6 +401,8 @@ class Reconciler:
             out["cause_detail"] = f"no XBRL field for role {role}"
             return out
         spans = [(a, b) for a, b, _, _ in sentence_usd]
+        if row["numeric_kind"] == "delta":
+            return self._reconcile_change(row, out, fields, sentence, s, e, spans)
         period = mention_period(sentence, s, e, int(row["fiscal_year"]), spans)
         out["fiscal_year_ref"], out["period_source"] = period.fiscal_year, period.source
         text_value = float(row["value"])
@@ -417,6 +449,147 @@ class Reconciler:
         )  # fmt: skip
         out["mismatch_cause"], out["cause_detail"] = cause.value, detail
         return out
+
+    # -- change amounts ("increased $1.0 billion") ---------------------------------------
+
+    def _reconcile_change(
+        self,
+        row: dict[str, Any],
+        out: dict[str, Any],
+        fields: list[str],
+        sentence: str,
+        s: int,
+        e: int,
+        spans: Sequence[tuple[int, int]],
+    ) -> dict[str, Any]:
+        """Compare a change amount with fact(t) - fact(t-1) from the same filing."""
+        out["comparison"] = "change"
+        period = change_period(sentence, s, e, int(row["fiscal_year"]), spans)
+        out["fiscal_year_ref"], out["period_source"] = period.fiscal_year, period.source
+        t = period.fiscal_year
+        text_value = abs(float(row["value"]))
+        tol = rounding_tolerance(str(row["raw_text"]), float(row["unit_scale"])) or 0.0
+        filing_date = pd.Timestamp(row["filing_date"])
+        cik, accession = int(row["cik"]), str(row["accession"])
+        chosen: tuple[str, pd.Series, pd.Series, pd.DataFrame, pd.DataFrame] | None = None
+        for f in fields:
+            cur, cur_versions = self.fact_for(cik, f, t, accession, filing_date)
+            prev, prev_versions = self.fact_for(cik, f, t - 1, accession, filing_date)
+            if cur is None or prev is None:
+                continue
+            candidate = (f, cur, prev, cur_versions, prev_versions)
+            if chosen is None:
+                chosen = candidate
+            if _close(text_value, float(cur["value"]) - float(prev["value"]), tol):
+                chosen = candidate
+                break
+        if chosen is None:
+            out["canonical_field"] = fields[0]
+            out["cause_detail"] = (
+                f"no XBRL facts for {', '.join(fields)} FY{t} and FY{t - 1} to take a change"
+            )
+            return out
+        field, cur, prev, cur_versions, prev_versions = chosen
+        expected = float(cur["value"]) - float(prev["value"])
+        diff = abs(text_value - abs(expected))
+        out.update(
+            canonical_field=field,
+            period_start=cur["period_start"],
+            period_end=cur["period_end"],
+            xbrl_tag=cur["tag"],
+            xbrl_value=expected,
+            xbrl_accession=cur["accession"],
+            xbrl_filed=cur["filed"],
+            abs_diff=diff,
+            rel_diff=diff / abs(expected) if expected else None,
+        )
+        base_note = f"FY{t} {float(cur['value']):,.0f} - FY{t - 1} {float(prev['value']):,.0f}"
+        if _close(text_value, expected, tol):
+            out["status"] = Status.MATCH.value
+            out["cause_detail"] = base_note
+            return out
+        out["status"] = Status.MISMATCH.value
+        cause, detail = self._classify_change(
+            text_value, tol, field, cur, prev, cur_versions, prev_versions, accession, sentence
+        )
+        out["mismatch_cause"], out["cause_detail"] = (
+            cause.value,
+            f"{detail}; {base_note}".strip("; "),
+        )
+        return out
+
+    def _classify_change(
+        self,
+        text_value: float,
+        tol: float,
+        field: str,
+        cur: pd.Series,
+        prev: pd.Series,
+        cur_versions: pd.DataFrame,
+        prev_versions: pd.DataFrame,
+        accession: str,
+        sentence: str,
+    ) -> tuple[Cause, str]:
+        """Ordered causes for change amounts (non-GAAP is not assessed for changes)."""
+        cur_v, prev_v = float(cur["value"]), float(prev["value"])
+        expected = cur_v - prev_v
+        # 1. restatement: the change computed with another version of either year
+        for which, versions, other_fixed in (
+            ("FY t-1", prev_versions, cur_v),
+            ("FY t", cur_versions, prev_v),
+        ):
+            for v in versions.to_dict("records"):
+                version_value = float(v["value"])
+                base = prev_v if which == "FY t-1" else cur_v
+                if abs(abs(version_value) - abs(base)) <= 2 * tol:
+                    continue  # not distinguishable from the compared version
+                alt = (
+                    other_fixed - version_value
+                    if which == "FY t-1"
+                    else version_value - other_fixed
+                )
+                if _close(text_value, alt, tol):
+                    return Cause.RESTATEMENT, (
+                        f"equals the change using the {which} version {version_value:,.0f} "
+                        f"filed {pd.Timestamp(v['filed']).date()}"
+                    )
+        # 2. segment: the same dimensional member's change between the two years
+        inline = self._inline_by.get(accession)
+        if inline is not None:
+            concepts = set(self.tag_map.fields[field].tags)
+            dims = inline[inline["is_dimensional"] & inline["concept"].isin(concepts)]
+
+            def at(f: pd.Series) -> pd.DataFrame:
+                same = (dims["period_end"] == f["period_end"]) & (
+                    dims["period_start"] == f["period_start"]
+                )
+                return pd.DataFrame(dims[same])
+
+            merged = at(cur).merge(at(prev), on=["concept", "dims"], suffixes=("_t", "_p"))
+            precise = tol <= PRECISE_RELATIVE_TOL * text_value
+            words = set(re.findall(r"[a-z]{3,}", sentence.lower()))
+            for d in merged.to_dict("records"):
+                change = float(d["value_t"]) - float(d["value_p"])
+                if not _close(text_value, change, tol):
+                    continue
+                named = bool(member_words(str(d["dims"])) & words)
+                if named or precise:
+                    why = "member named in sentence" if named else "precise number"
+                    return Cause.SEGMENT_VS_CONSOLIDATED, (
+                        f"equals the change in {d['concept']} [{d['dims']}] ({why})"
+                    )
+        # 3. scale or rounding
+        if expected and text_value and tol <= SCALE_RELATIVE_TOL * text_value:
+            for k in (-9, -6, -3, 3, 6, 9):
+                if _close(text_value, expected * 10.0**k, tol):
+                    return Cause.SCALE_OR_ROUNDING, f"text equals the change x 10^{k}"
+        if _close(text_value, expected, 2 * tol):
+            return Cause.SCALE_OR_ROUNDING, "off by at most one unit in the last displayed digit"
+        # 4. extraction error, noting a level read as a change
+        for label, level in (("FY t", cur_v), ("FY t-1", prev_v)):
+            if _close(text_value, level, tol):
+                return Cause.EXTRACTION_ERROR, f"equals the {label} level, not a change"
+        return Cause.EXTRACTION_ERROR, ""
 
 
 def reconcile(

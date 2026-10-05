@@ -4,13 +4,14 @@ by ``edgar-extract run --stage qa``, which writes ``reports/qa_summary.md``.
 Definitions. Both are measured against XBRL, which is not the same as being correct:
 
 * **Agreement with XBRL** ("precision vs XBRL"): among text extractions that could be
-  compared with an XBRL fact (status MATCH or MISMATCH), the share that MATCH. A mismatch
+  compared with an XBRL fact (status MATCH or MISMATCH), the share that MATCH. Values and
+  change amounts are both included; ``comparison`` tells them apart. A mismatch
   can be a correct reading of a segment or non-GAAP number, so this understates accuracy
   for those roles. Accuracy against human labels lives in ``reports/ner_metrics.md``.
 * **XBRL recall**: for each 10-K, the filing's own key facts for its fiscal year
-  (Revenues, R&D, restructuring, impairment, litigation expense) that a text extraction
-  from the same filing matched. Prose need not mention every fact, so this measures
-  coverage of the facts, not extractor failure.
+  (Revenues, R&D, restructuring, impairment, litigation expense) whose *value* a text
+  extraction from the same filing matched (change amounts do not count). Prose need not
+  mention every fact, so this measures coverage of the facts, not extractor failure.
 * **Role coverage**: per filing and section, the share of detected numeric spans that the
   extractor assigned a specific role (anything except OTHER_NUMERIC).
 """
@@ -78,7 +79,10 @@ def key_facts(canonical: pd.DataFrame, universe: pd.DataFrame) -> pd.DataFrame:
 
 def xbrl_recall(rec: pd.DataFrame, canonical: pd.DataFrame, universe: pd.DataFrame) -> pd.DataFrame:
     facts = key_facts(canonical, universe)
-    matched = rec[rec["status"] == "MATCH"][["accession", "canonical_field", "fiscal_year_ref"]]
+    matched = rec[rec["status"] == "MATCH"]
+    if "comparison" in matched.columns:
+        matched = matched[matched["comparison"] == "level"]  # a matched change is not the value
+    matched = matched[["accession", "canonical_field", "fiscal_year_ref"]]
     matched = matched.drop_duplicates().assign(found=1)
     facts = facts.merge(
         matched,

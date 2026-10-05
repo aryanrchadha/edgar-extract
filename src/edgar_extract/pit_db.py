@@ -213,9 +213,12 @@ class PointInTimeDB:
         """Insert text extractions that were tied to an XBRL period (MATCH or MISMATCH).
 
         Rows without a resolved period (NO_XBRL_COUNTERPART) cannot be keyed by
-        ``period_end`` and are not stored.
+        ``period_end`` and are not stored, nor are change amounts ("increased $1.0
+        billion"), which are differences rather than values of a field.
         """
         rec = reconciliation[reconciliation["status"].isin(["MATCH", "MISMATCH"])]
+        if "comparison" in rec.columns:
+            rec = rec[rec["comparison"] == "level"]  # a change amount is not a fact value
         if rec.empty:
             return 0
         conf = rec["role_cue"].astype(str).str.extract(r"^p=([0-9.]+)$")[0].astype(float)

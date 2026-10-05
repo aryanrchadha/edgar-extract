@@ -6,8 +6,10 @@ depended on data, it was checked against the filing's XBRL (noted below). **The 
 owner has not yet reviewed them;** treat the verdicts as a second opinion to verify, not
 as ground truth. Reproduce the sample with `uv run python scripts/sample_mismatch_audit.py`.
 
-**Sample.** 25 rows drawn uniformly at random (seed 2026) from the 1,767 `MISMATCH` rows of
-`reconciliation.parquet`, produced by the regex extractor on the full universe. **n = 25 is
+**Sample.** 25 rows drawn uniformly at random (seed 2026) from the 1,767 value
+(`comparison="level"`) `MISMATCH` rows of `reconciliation.parquet`, produced by the regex
+extractor on the full universe. Change amounts were reconciled later and are not covered
+by this audit. **n = 25 is
 below 30**, so the accuracy below has a wide interval (95% Wilson: 61%-91%).
 
 **How a verdict is decided.** The true reason for each mismatch is determined first. If it

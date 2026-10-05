@@ -19,7 +19,11 @@ N = 25
 
 def main() -> None:
     rec = pd.read_parquet(ROOT / "data" / "interim" / "reconciliation.parquet")
-    sample = rec[rec["status"] == "MISMATCH"].sample(N, random_state=SEED).reset_index(drop=True)
+    mismatches = rec[rec["status"] == "MISMATCH"]
+    if "comparison" in mismatches.columns:
+        # The audit (2026-10-03) predates change-amount reconciliation: level rows only.
+        mismatches = mismatches[mismatches["comparison"] == "level"]
+    sample = mismatches.sample(N, random_state=SEED).reset_index(drop=True)
     for i, x in sample.iterrows():
         j = int(x["span_start"]) - int(x["sentence_start"])
         s = str(x["sentence"])

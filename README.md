@@ -92,6 +92,7 @@ Edit [`config.yaml`](config.yaml) first:
 uv run edgar-extract run [--stage universe|sections|extract|xbrl|reconcile|pit|qa|all] [--offline] [--refresh]
 uv run edgar-extract extract --ticker AAPL --years 5 [--extractor regex|ner]
 uv run edgar-extract asof --ticker GE --date 2023-03-01 --field Revenues [--include-text] [--lag-days 1]
+uv run edgar-extract screen --date 2024-05-01 [--tickers AAPL,GE] [--csv out.csv]
 uv run edgar-extract dashboard [--port 8501]
 uv run edgar-extract label [--prepare | --status] [--labeler INITIALS]
 uv run edgar-extract ner train
@@ -130,15 +131,15 @@ pit.restatements(tickers=None, fields=None)  # periods whose value changed after
   (1.0 for XBRL; model probability for NER; NULL for regex, which has no calibrated score),
   `mismatch_cause`, `xbrl_tag`, and lineage. Lineage is the filing-index URL for XBRL rows;
   for text rows it is the document URL, section, character span and sentence.
-- **Fields:** 27 canonical fields from [`tag_map.yaml`](src/edgar_extract/tag_map.yaml):
+- **Fields:** 29 canonical fields from [`tag_map.yaml`](src/edgar_extract/tag_map.yaml):
   revenue, costs, R&D, SG&A, restructuring, impairment, litigation, operating and net
-  income, EPS, shares, cash flow, capex, and balance-sheet totals. Together they cover
-  Piotroski, Altman and DCF inputs, apart from prices.
+  and pre-tax income, EPS, shares, cash flow, capex, and balance-sheet totals. Together
+  they cover Piotroski, Altman and DCF inputs, apart from prices.
 
-**Built from the default universe:** 83,666 rows (81,697 XBRL facts across every filing
-that reported them, plus 1,969 reconciled text values). By `pit.restatements()`, 136 annual
+**Built from the default universe:** 90,546 rows (88,577 XBRL facts across every filing
+that reported them, plus 1,969 reconciled text values). By `pit.restatements()`, 147 annual
 (company, field, period) values ending 2020 or later changed after first being reported
-(527 including balance-sheet instants). For example:
+(545 including balance-sheet instants). For example:
 - **GE FY2022 revenue:** $76.6B as first reported (filed 2023-02-10), then $58.1B after the
   GE HealthCare spin-off, then $29.1B after GE Vernova.
 - **JNJ FY2022 revenue:** $94.9B, then $80.0B after the Kenvue separation.
@@ -151,6 +152,35 @@ that reported them, plus 1,969 reconciled text values). By `pit.restatements()`,
 
 A Hypothesis property test covers (d) and checks agreement with a brute-force
 recomputation for 150 random dates, field sets, tickers and lags.
+
+### Point-in-time screens: Piotroski F-score and Altman Z''
+
+```python
+from edgar_extract.screens import screen
+
+screen(pit, "2024-05-01")  # one row per company, using only data filed by that date
+```
+
+`edgar-extract screen --date 2024-05-01` computes both scores from `as_of`.
+- **No look-ahead:** every row carries `knowable_by`, the latest filing date among its
+  inputs, which is never after the screen date.
+- **Fiscal years** come from annual periods reported in a 10-K. 10-Q trailing-twelve-month
+  and proxy pay-versus-performance figures are also year-long, but they don't define fiscal
+  years; on a first pass they mis-anchored AMZN.
+- **Labeled fallbacks** fill gaps; each is listed in `derived`:
+  - gross profit = revenue - cost of revenue;
+  - liabilities = liabilities and equity - equity;
+  - EBIT = pre-tax income + interest expense;
+  - shares = shares outstanding.
+- **Missing inputs are never imputed.** They make a signal `None` and are listed in
+  `missing`.
+
+Coverage as of 2024-05-01:
+- **Piotroski:** 15 of 20 companies have all 9 signals. Compare scores only within that
+  group (`f_complete`).
+- **Altman Z″** (the book-equity version for non-manufacturers; the original Z needs
+  market cap) is undefined for JPM and WFC (banks have no working capital) and for GE (its
+  interest expense uses a custom XBRL concept that companyfacts omits).
 
 ## M8: does point-in-time matter? ([full report](reports/pit_vs_naive.md))
 
@@ -266,6 +296,9 @@ field and fiscal year:
 - **Year:** read from the text ("in 2023", "..., respectively", "prior year"), else the
   filing's own year.
 - **Fact:** the value as reported in the same filing, never a later one.
+- **Change amounts** ("revenue increased $1.0 billion") are compared with fact(t) -
+  fact(t-1) from the same filing (`comparison="change"`). "compared to 2023" names the
+  base year. Change amounts are never stored in the PIT DB as field values.
 
 Each mismatch gets exactly one cause, by ordered rules:
 1. RESTATEMENT;
@@ -278,14 +311,28 @@ Rules that search many candidate values fire only when the text is precise enoug
 corroborated (the segment named in the sentence), so that coincidences are not counted as
 causes. Each cause has a synthetic unit test.
 
-| regex extractor, 3,270 role-bearing extractions | n |
-|---|---|
-| MATCH | 202 |
-| MISMATCH: EXTRACTION_ERROR / SEGMENT / NON_GAAP / SCALE_OR_ROUNDING / RESTATEMENT | 1,458 / 254 / 33 / 21 / 1 |
-| NO_XBRL_COUNTERPART (guidance, change amounts, quarters, unmapped roles) | 1,301 |
+| regex extractor, 3,270 role-bearing extractions | values | changes | total |
+|---|---|---|---|
+| MATCH | 202 | 102 | 304 |
+| MISMATCH | 1,767 | 470 | 2,237 |
+| NO_XBRL_COUNTERPART (guidance, quarters, unmapped roles) | 725 | 4 | 729 |
 
-[`reports/mismatch_audit.md`](reports/mismatch_audit.md) reviews 25 random mismatches. The
-reviewer was Claude, not yet the project owner, and n = 25 < 30.
+Mismatch causes overall:
+
+| cause | n |
+|---|---|
+| EXTRACTION_ERROR | 1,743 |
+| SEGMENT_VS_CONSOLIDATED | 436 |
+| NON_GAAP_ADJUSTMENT | 33 |
+| SCALE_OR_ROUNDING | 23 |
+| RESTATEMENT | 2 |
+
+Change amounts add 102 exact matches, e.g. CAT's "+$9.223 billion" = FY2021 - FY2020 sales,
+and BA's "R&D increased by $603 million".
+
+[`reports/mismatch_audit.md`](reports/mismatch_audit.md) reviews 25 random value
+mismatches; it predates change-amount reconciliation. The reviewer was Claude, not yet the
+project owner, and n = 25 < 30.
 - The rules assigned the right cause in **20 of 25 (80%, 95% CI 61-91%)**.
 - Most EXTRACTION_ERRORs are real regex role errors or wrong-year attributions.
 - The misses are segment amounts named only in section headings, plus two taxonomy gaps.
@@ -305,7 +352,8 @@ It makes no network calls, and Streamlit telemetry is off. It shows:
 The same numbers are in [`reports/qa_summary.md`](reports/qa_summary.md). These rates
 measure agreement with XBRL, not correctness: a segment figure read correctly still
 mismatches consolidated XBRL. Results:
-- **Agreement:** 10.3% of comparable extractions match XBRL.
+- **Agreement:** 12.0% of comparable extractions match XBRL (2,541 values and changes);
+  for R&D it is 48.6%, since MD&A mostly states R&D as a change.
 - **Revenue recall:** 58 of 100 10-Ks state their consolidated revenue in prose in a way
   that matches XBRL.
 - **Role coverage:** a median 18% of MD&A numbers get a specific role.

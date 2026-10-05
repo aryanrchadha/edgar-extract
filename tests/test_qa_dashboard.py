@@ -121,3 +121,10 @@ def test_dashboard_renders_offline(artifacts: Path, monkeypatch: pytest.MonkeyPa
     assert any("Point-in-time" in h for h in headers)
     assert len(at.get("plotly_chart")) >= 7
     assert any("No gold-label metrics yet" in i.value for i in at.info)
+
+
+def test_recall_ignores_matched_change_amounts() -> None:
+    rec = REC.assign(comparison="level")
+    rec.loc[0, "comparison"] = "change"  # the only MATCH is a change amount
+    r = qa.recall(rec, CANONICAL, UNIVERSE, ["canonical_field"]).set_index("canonical_field")
+    assert r.loc["Revenues", "found"] == 0

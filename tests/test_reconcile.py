@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -132,7 +133,7 @@ def test_no_counterpart_cases() -> None:
             role="GUIDANCE",
         ),
         extraction(
-            "Revenue increased $1.0 billion.", "$1.0 billion", 1e9, 1e9, numeric_kind="delta"
+            "Revenue grew 12% in 2024.", "12%", 12.0, 1.0, unit="percent", numeric_kind="pct_change"
         ),
         extraction("Fourth quarter revenue was $2.6 billion.", "$2.6 billion", 2.6e9, 1e9),
         extraction("Revenue was $5.0 billion in 2019.", "$5.0 billion", 5e9, 1e9),
@@ -140,7 +141,7 @@ def test_no_counterpart_cases() -> None:
     assert (rows["status"] == Status.NO_XBRL_COUNTERPART).all()
     assert rows["cause_detail"].tolist()[:3] == [
         "forward-looking figure",
-        "not a dollar level (USD, delta)",
+        "not a dollar amount (percent, pct_change)",
         "sub-annual figure; only annual facts are compared",
     ]
     assert "no XBRL fact" in rows["cause_detail"].iloc[3]
@@ -313,3 +314,83 @@ def test_period_hint_ignores_years_outside_the_comparative_window() -> None:
     row = extraction("Revenue was $7,777 million.", "$7,777 million", 7_777e6, 1e6)
     r = reconcile(pd.DataFrame([row]), canonical, INLINE, TAG_MAP).iloc[0]
     assert r["mismatch_cause"] == Cause.EXTRACTION_ERROR and r["cause_detail"] == ""
+
+
+# -- change amounts --------------------------------------------------------------------------
+
+
+def change(sentence: str, raw: str, value: float, scale: float, **kw: Any) -> dict[str, Any]:
+    return extraction(sentence, raw, value, scale, numeric_kind="delta", **kw)
+
+
+def test_change_matches_difference_of_two_years() -> None:
+    # FY2024 10,000 - FY2023 9,000 = 1,000, both as reported in the FY2024 10-K
+    r = one(change("Revenue increased $1.0 billion in 2024.", "$1.0 billion", 1e9, 1e9))
+    assert (r["status"], r["comparison"], r["xbrl_value"]) == (Status.MATCH, "change", 1_000e6)
+    assert "FY2024 10,000,000,000 - FY2023 9,000,000,000" in r["cause_detail"]
+
+
+def test_change_base_year_wording() -> None:
+    r = one(change("Revenue increased $1.0 billion compared to 2023.", "$1.0 billion", 1e9, 1e9))
+    assert (r["fiscal_year_ref"], r["period_source"], r["status"]) == (
+        2024,
+        "base_year",
+        Status.MATCH,
+    )
+
+
+def test_change_restatement_cause() -> None:
+    # In the FY2025 10-K, FY2025 = 11,000 and FY2024 (recast) = 9,400: change 1,600.
+    # The text quotes 1,000 = 11,000 - 10,000, i.e. against FY2024 as originally reported.
+    r = one(
+        change(
+            "Revenue increased $1,000 million in 2025.", "$1,000 million", 1_000e6, 1e6,
+            fiscal_year=2025, accession=ACC_2025, filing_date=pd.Timestamp("2026-02-01"),
+        )
+    )  # fmt: skip
+    assert r["status"] == Status.MISMATCH and r["mismatch_cause"] == Cause.RESTATEMENT
+    assert r["xbrl_value"] == 1_600e6
+
+
+def test_level_read_as_change_is_an_extraction_error() -> None:
+    r = one(change("Revenue increased to $10,000 million.", "$10,000 million", 10_000e6, 1e6))
+    assert r["mismatch_cause"] == Cause.EXTRACTION_ERROR
+    assert "equals the FY t level" in r["cause_detail"]
+
+
+def test_change_rows_are_not_ingested_into_the_pit_db(tmp_path: Path) -> None:
+    from edgar_extract.pit_db import PointInTimeDB, build_pit_db
+
+    rec = run(
+        extraction("Revenue was $10,000 million.", "$10,000 million", 10_000e6, 1e6),
+        change("Revenue increased $1.0 billion in 2024.", "$1.0 billion", 1e9, 1e9),
+    ).assign(
+        extractor="regex_v1", role_cue="revenue", form="10-K",
+        primary_doc_url="https://www.sec.gov/Archives/x.htm",
+    )  # fmt: skip
+    companies = pd.DataFrame([{"cik": CIK, "ticker": "ABC", "name": "ABC"}])
+    stats = build_pit_db(tmp_path / "p.duckdb", CANONICAL.iloc[:0], companies, [rec])
+    assert stats["new_text_rows"] == 1
+    with PointInTimeDB(tmp_path / "p.duckdb", read_only=True) as pit:
+        rows = pit.as_of("2030-01-01", ["ABC"], ["Revenues"], sources=("text",))
+    assert rows["value_usd"].tolist() == [10_000e6]
+
+
+def test_segment_change_named_in_sentence() -> None:
+    inline = pd.concat(
+        [
+            INLINE,
+            INLINE.assign(
+                value=2_000e6,
+                period_start=pd.Timestamp("2023-01-01"),
+                period_end=pd.Timestamp("2023-12-31"),
+            ),
+        ],
+        ignore_index=True,
+    )
+    row = change(
+        "Cloud Services revenue increased $1.2 billion in 2024.", "$1.2 billion", 1.2e9, 1e9
+    )
+    r = reconcile(pd.DataFrame([row]), CANONICAL, inline, TAG_MAP).iloc[0]
+    assert r["mismatch_cause"] == Cause.SEGMENT_VS_CONSOLIDATED  # 3,210 - 2,000 = 1,210
+    assert "member named in sentence" in r["cause_detail"]

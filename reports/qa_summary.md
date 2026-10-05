@@ -8,11 +8,11 @@ same as correctness (see `reports/mismatch_audit.md` and `reports/ner_metrics.md
 
 | role | comparable n | match | agreement [95% CI] |
 |---|---|---|---|
-| LITIGATION_RESERVE | 51 | 10 | 19.6% [11.0%-32.5%] |
-| ONE_TIME_CHARGE | 749 | 63 | 8.4% [6.6%-10.6%] |
-| RD_EXPENSE | 59 | 18 | 30.5% [20.3%-43.1%] |
-| REVENUE | 1110 | 111 | 10.0% [8.4%-11.9%] |
-| **all** | 1969 | 202 | 10.3% |
+| LITIGATION_RESERVE | 52 | 10 | 19.2% [10.8%-31.9%] |
+| ONE_TIME_CHARGE | 757 | 63 | 8.3% [6.6%-10.5%] |
+| RD_EXPENSE | 111 | 54 | 48.6% [39.6%-57.8%] |
+| REVENUE | 1621 | 177 | 10.9% [9.5%-12.5%] |
+| **all** | 2541 | 304 | 12.0% |
 
 ## XBRL recall: the filing's own key facts matched by text from the same filing
 
