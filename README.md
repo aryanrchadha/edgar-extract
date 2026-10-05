@@ -89,7 +89,7 @@ Edit [`config.yaml`](config.yaml) first:
 ### CLI
 
 ```bash
-uv run edgar-extract run [--stage universe|sections|extract|xbrl|reconcile|pit|qa|all] [--offline] [--refresh]
+uv run edgar-extract run [--stage universe|sections|extract|xbrl|reconcile|pit|qa|all] [--offline] [--refresh] [--rebuild-pit]
 uv run edgar-extract extract --ticker AAPL --years 5 [--extractor regex|ner]
 uv run edgar-extract asof --ticker GE --date 2023-03-01 --field Revenues [--include-text] [--lag-days 1]
 uv run edgar-extract screen --date 2024-05-01 [--tickers AAPL,GE] [--csv out.csv]
@@ -120,6 +120,9 @@ pit.restatements(tickers=None, fields=None)  # periods whose value changed after
 - **Append-only.** Every report of a value is its own row: the original, each comparative
   re-reported in later 10-Ks, and every restatement. The class exposes no update or delete.
   Rebuilds are idempotent, because rows are identified by a hash of their key columns.
+  Text rows keep the reconciliation cause from the run that ingested them. After changing
+  reconciliation rules, `run --stage pit --rebuild-pit` recreates the database from the
+  current artifacts and swaps it in atomically.
 - **Knowable on D** means `filing_date <= D`. EDGAR's filing date already moves
   after-hours acceptances to the next business day; `lag_days=1` adds a day for strategies
   that trade on D.
@@ -308,8 +311,10 @@ Each mismatch gets exactly one cause, by ordered rules:
 5. EXTRACTION_ERROR.
 
 Rules that search many candidate values fire only when the text is precise enough, or
-corroborated (the segment named in the sentence), so that coincidences are not counted as
-causes. Each cause has a synthetic unit test.
+corroborated, so that coincidences are not counted as causes. Corroboration means the
+segment is named in the sentence, or in the headings just above it (for example
+"North America:" above a segment discussion), with the number within 5%. Each cause has a
+synthetic unit test.
 
 | regex extractor, 3,270 role-bearing extractions | values | changes | total |
 |---|---|---|---|
@@ -321,10 +326,10 @@ Mismatch causes overall:
 
 | cause | n |
 |---|---|
-| EXTRACTION_ERROR | 1,743 |
-| SEGMENT_VS_CONSOLIDATED | 436 |
+| EXTRACTION_ERROR | 1,667 |
+| SEGMENT_VS_CONSOLIDATED | 513 |
 | NON_GAAP_ADJUSTMENT | 33 |
-| SCALE_OR_ROUNDING | 23 |
+| SCALE_OR_ROUNDING | 22 |
 | RESTATEMENT | 2 |
 
 Change amounts add 102 exact matches, e.g. CAT's "+$9.223 billion" = FY2021 - FY2020 sales,
@@ -335,7 +340,9 @@ mismatches; it predates change-amount reconciliation. The reviewer was Claude, n
 project owner, and n = 25 < 30.
 - The rules assigned the right cause in **20 of 25 (80%, 95% CI 61-91%)**.
 - Most EXTRACTION_ERRORs are real regex role errors or wrong-year attributions.
-- The misses are segment amounts named only in section headings, plus two taxonomy gaps.
+- The misses were segment amounts named only in section headings, plus two taxonomy gaps.
+  Heading context now catches the two KHC cases; that is 22/25 **on the same sample that
+  motivated the change**, so it is not an unbiased estimate.
 
 ## M7: QA dashboard
 
@@ -440,8 +447,9 @@ them.
 - **Reconciliation compares annual consolidated or dimensional facts.** Quarterly figures
   and change amounts have no counterpart. Concepts missing from `tag_map.yaml` (e.g.
   `OtherCostAndExpenseOperating`) and text that sums several facts fall into
-  EXTRACTION_ERROR. The segment rule needs the segment named in the sentence, so amounts
-  named only in a section heading are missed.
+  EXTRACTION_ERROR. The segment rule needs the segment named in the sentence or the
+  headings above it (or a precise number), so a coarse segment amount with no nearby
+  name is still counted as EXTRACTION_ERROR.
 - **RESTATEMENT does not separate error corrections from recasts.** Discontinued
   operations, spin-offs and reclassifications count as restatements, which is how they
   should be treated for look-ahead purposes.

@@ -145,6 +145,13 @@ def run(
     refresh: Annotated[
         bool, typer.Option(help="Refetch mutable JSON endpoints (submissions, companyfacts)")
     ] = False,
+    rebuild_pit: Annotated[
+        bool,
+        typer.Option(
+            "--rebuild-pit",
+            help="Recreate the PIT DB from current artifacts (after reconciliation changes)",
+        ),
+    ] = False,
 ) -> None:
     """Run the pipeline, or a single stage of it."""
     settings = _load(config)
@@ -162,7 +169,8 @@ def run(
         if stage in (Stage.reconcile, Stage.all):
             _print_reconciliation(run_reconcile_stage(settings))
         if stage in (Stage.pit, Stage.all):
-            console.print(f"pit: {run_pit_stage(settings)} -> {settings.paths.pit_db}")
+            pit_stats = run_pit_stage(settings, rebuild=rebuild_pit)
+            console.print(f"pit: {pit_stats} -> {settings.paths.pit_db}")
         if stage in (Stage.qa, Stage.all):
             console.print(f"qa: wrote {run_qa_stage(settings)}")
     except (ConfigError, EdgarError, FileNotFoundError) as exc:

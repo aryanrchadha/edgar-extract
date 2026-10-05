@@ -394,3 +394,31 @@ def test_segment_change_named_in_sentence() -> None:
     r = reconcile(pd.DataFrame([row]), CANONICAL, inline, TAG_MAP).iloc[0]
     assert r["mismatch_cause"] == Cause.SEGMENT_VS_CONSOLIDATED  # 3,210 - 2,000 = 1,210
     assert "member named in sentence" in r["cause_detail"]
+
+
+def test_segment_named_only_in_heading() -> None:
+    row = extraction(
+        "Net sales were $3.2 billion in 2024.", "$3.2 billion", 3.2e9, 1e9, role="REVENUE",
+        context_heading="Cloud Services: | Fiscal Year 2024 Compared to Fiscal Year 2023:",
+    )  # fmt: skip
+    r = one(row)
+    assert r["mismatch_cause"] == Cause.SEGMENT_VS_CONSOLIDATED
+    assert "member named in heading" in r["cause_detail"]
+
+
+def test_heading_needs_a_reasonably_precise_number() -> None:
+    inline = INLINE.assign(value=0.3e9)
+    row = extraction(
+        "Net sales were $0.3 billion in 2024.", "$0.3 billion", 0.3e9, 1e9,
+        context_heading="Cloud Services:",
+    )  # fmt: skip
+    r = reconcile(pd.DataFrame([row]), CANONICAL, inline, TAG_MAP).iloc[0]
+    assert r["mismatch_cause"] == Cause.EXTRACTION_ERROR  # +/-17%: too coarse for a heading
+
+
+def test_generic_words_do_not_corroborate() -> None:
+    from edgar_extract.reconcile import member_words
+
+    words = member_words("srt:ProductOrServiceAxis=xom:IncomeFromEquityAffiliatesMember")
+    assert words == {"equity", "affiliates"}
+    assert not (words & {"cash", "flow", "from", "operating", "activities"})

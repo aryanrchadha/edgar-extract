@@ -224,6 +224,7 @@ EXTRACTION_COLUMNS = [
     "role_cue",
     "extractor",
     "block_kind",
+    "context_heading",
 ]
 
 
@@ -277,6 +278,7 @@ def extract_regex(sections: pd.DataFrame) -> pd.DataFrame:
                         "role_cue": decision.cue,
                         "extractor": EXTRACTOR_NAME,
                         "block_kind": sent.block_kind,
+                        "context_heading": sent.context,
                     }
                 )
     df = pd.DataFrame(rows, columns=EXTRACTION_COLUMNS)
@@ -525,8 +527,13 @@ def run_reconcile_stage(settings: Settings, extractions_name: str = "extractions
 # -- point-in-time database (M6) -----------------------------------------------------------
 
 
-def run_pit_stage(settings: Settings) -> dict[str, int]:
-    """Build or extend data/pit.duckdb from canonical XBRL facts and reconciled text values."""
+def run_pit_stage(settings: Settings, *, rebuild: bool = False) -> dict[str, int]:
+    """Build or extend data/pit.duckdb from canonical XBRL facts and reconciled text values.
+
+    Rows are append-only within a database. Text rows record the reconciliation cause from
+    the run that ingested them, so after reconciliation rules change, pass ``rebuild=True``:
+    a fresh database is built next to the old one and swapped in atomically.
+    """
     from edgar_extract.pit_db import build_pit_db
 
     paths = xbrl_paths(settings)
@@ -541,9 +548,16 @@ def run_pit_stage(settings: Settings) -> dict[str, int]:
         .rename(columns={"company_name": "name"})
     )
     reconciliations = [pd.read_parquet(p) for p in [paths["reconciliation"]] if p.is_file()]
-    return build_pit_db(
-        settings.paths.pit_db, pd.read_parquet(paths["canonical"]), companies, reconciliations
-    )
+    canonical = pd.read_parquet(paths["canonical"])
+    target = settings.paths.pit_db
+    if not rebuild:
+        return build_pit_db(target, canonical, companies, reconciliations)
+    fresh = target.with_name(target.stem + ".rebuild" + target.suffix)
+    fresh.unlink(missing_ok=True)
+    stats = build_pit_db(fresh, canonical, companies, reconciliations)
+    fresh.replace(target)
+    Path(str(fresh) + ".wal").unlink(missing_ok=True)
+    return stats
 
 
 # -- QA (M7) ----------------------------------------------------------------------------------

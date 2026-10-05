@@ -121,6 +121,7 @@ class Sentence:
     start: int  # offset in the section text
     end: int
     block_kind: str
+    context: str = ""  # recent headings above the sentence, " | "-separated
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,49 @@ def split_sentences(text: str) -> list[tuple[int, int]]:
     return spans
 
 
+HEADING_MAX_CHARS = 80
+HEADING_MAX_WORDS = 10
+CONTEXT_HEADINGS = 4
+CONTEXT_LOOKBACK_BLOCKS = 40
+
+
+_YEAR_TOKEN_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def is_heading_like(text: str) -> bool:
+    """A short label line such as "North America:" or "Results of Operations".
+
+    It starts with a capital letter, has at most 10 words, no figures other than years, and
+    no sentence-ending period. That excludes table rows ("Total income $ 74,842"), prose
+    fragments that start mid-word, and footnotes ("(1) Inclusive of ...").
+    """
+    stripped = text.strip()
+    if not stripped or len(stripped) > HEADING_MAX_CHARS or stripped.endswith("."):
+        return False
+    if not stripped[0].isupper() or len(stripped.split()) > HEADING_MAX_WORDS:
+        return False
+    return not re.search(r"\d", _YEAR_TOKEN_RE.sub("", stripped))
+
+
+def heading_context(
+    text: str, block_starts: list[int], index: int, *, limit: int = CONTEXT_HEADINGS
+) -> str:
+    """Up to ``limit`` heading-like blocks above block ``index``, nearest last.
+
+    Segment discussions often name the segment only in a heading several blocks up
+    ("North America:" above a table and a "Fiscal Year 2023 Compared to 2022:" sub-head).
+    """
+    found: list[str] = []
+    for k in range(index - 1, max(-1, index - 1 - CONTEXT_LOOKBACK_BLOCKS), -1):
+        end = block_starts[k + 1] - 2 if k + 1 < len(block_starts) else len(text)
+        block = text[block_starts[k] : end]
+        if is_heading_like(block):
+            found.append(block.strip())
+            if len(found) == limit:
+                break
+    return " | ".join(reversed(found))
+
+
 def iter_sentences(
     text: str, block_starts: list[int], block_kinds: list[str], *, prose_only: bool = True
 ) -> Iterator[Sentence]:
@@ -194,8 +238,9 @@ def iter_sentences(
         block = text[start:end]
         if prose_only and not is_prose(block):
             continue
+        context = heading_context(text, block_starts, i)
         for s, e in split_sentences(block):
-            yield Sentence(block[s:e], start + s, start + e, block_kinds[i])
+            yield Sentence(block[s:e], start + s, start + e, block_kinds[i], context)
 
 
 # -- numeric mentions ------------------------------------------------------------------

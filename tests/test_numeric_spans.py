@@ -180,3 +180,42 @@ def test_iter_sentences_respects_blocks_and_skips_tables() -> None:
     ]
     for s in sents:
         assert text[s.start : s.end] == s.text
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("North America:", True),
+        ("Fiscal Year 2023 Compared to Fiscal Year 2022:", True),
+        ("Results of Operations", True),
+        ("Total income from operations $ 74,842 $ 84,293", False),
+        ("n the sale of securities of $0.2 billion in 2025", False),
+        ("(1) Inclusive of VELCADE which was previously disclosed", False),
+        ("Revenue increased in all regions.", False),
+        ("Segment results for the year by business, region, product line and channel", False),
+    ],
+)
+def test_is_heading_like(text: str, expected: bool) -> None:
+    from edgar_extract.numeric_spans import is_heading_like
+
+    assert is_heading_like(text) is expected
+
+
+def test_sentences_carry_recent_headings() -> None:
+    from edgar_extract.numeric_spans import iter_sentences
+
+    blocks = [
+        "North America:",
+        "Net sales $ 20,126 $ 20,340",
+        "Fiscal Year 2023 Compared to Fiscal Year 2022:",
+        "Net sales decreased 1.0% to $20.1 billion in 2023 compared to $20.3 billion in 2022.",
+    ]
+    text = "\n\n".join(blocks)
+    starts, pos = [], 0
+    for b in blocks:
+        starts.append(pos)
+        pos += len(b) + 2
+    sents = list(iter_sentences(text, starts, ["p", "table_row", "p", "p"]))
+    sent = sents[-1]  # the heading line is also prose-like, but carries no numbers
+    assert sent.text.startswith("Net sales decreased")
+    assert sent.context == "North America: | Fiscal Year 2023 Compared to Fiscal Year 2022:"

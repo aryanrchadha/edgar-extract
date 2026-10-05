@@ -304,3 +304,52 @@ def test_property_no_future_rows_and_matches_brute_force(
     merged = res.merge(expected, on=key, suffixes=("", "_bf"))
     assert len(merged) == len(res)
     assert (merged["value_usd"] == merged["value_usd_bf"]).all()
+
+
+def test_rebuild_refreshes_reconciliation_metadata(tmp_path: Path) -> None:
+    """Append-only within a DB; a rebuild picks up re-classified text rows."""
+    import yaml
+
+    from edgar_extract.config import load_settings
+    from edgar_extract.pipeline import run_pit_stage, xbrl_paths
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        yaml.safe_dump({"sec": {"contact_email": "a@b.edu"}, "universe": {"tickers": ["ABC"]}})
+    )
+    settings = load_settings(cfg)
+    paths = xbrl_paths(settings)
+    paths["canonical"].parent.mkdir(parents=True)
+    SYNTHETIC.to_parquet(paths["canonical"])
+    pd.DataFrame([{"cik": 1, "ticker": "ABC", "company_name": "Synthetic Co"}]).to_parquet(
+        settings.paths.universe_parquet
+    )
+    base = {
+        "cik": 1, "form": "10-K", "accession": "0000000001-24-000001",
+        "filing_date": pd.Timestamp("2024-02-15"), "value": 120.0, "extractor": "regex_v1",
+        "role_cue": "revenue", "xbrl_tag": "us-gaap:Revenues", "status": "MISMATCH",
+        "primary_doc_url": "https://www.sec.gov/Archives/x.htm", "section": "7",
+        "span_start": 10, "span_end": 22, "sentence": "Revenue was $120.",
+        "canonical_field": "Revenues", "comparison": "level",
+        "period_start": pd.Timestamp("2023-01-01"), "period_end": pd.Timestamp("2023-12-31"),
+    }  # fmt: skip
+
+    def causes() -> list[str]:
+        with PointInTimeDB(settings.paths.pit_db, read_only=True) as pit:
+            rows = pit.con.execute(
+                "SELECT mismatch_cause FROM facts WHERE source='text'"
+            ).fetchall()
+        return [r[0] for r in rows]
+
+    pd.DataFrame([{**base, "mismatch_cause": "EXTRACTION_ERROR"}]).to_parquet(
+        paths["reconciliation"]
+    )
+    run_pit_stage(settings)
+    pd.DataFrame([{**base, "mismatch_cause": "SEGMENT_VS_CONSOLIDATED"}]).to_parquet(
+        paths["reconciliation"]
+    )
+    run_pit_stage(settings)
+    assert causes() == ["EXTRACTION_ERROR"]  # append-only: the existing row is untouched
+    run_pit_stage(settings, rebuild=True)
+    assert causes() == ["SEGMENT_VS_CONSOLIDATED"]
+    assert not settings.paths.pit_db.with_name("pit.rebuild.duckdb").exists()

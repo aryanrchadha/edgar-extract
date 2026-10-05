@@ -82,3 +82,18 @@ tag map, and 1 aggregation of two facts.
   1, 33 and 21 rows out of 1,767 mismatches), so this audit says nothing about their
   precision. Their behavior is pinned by the synthetic unit tests in
   `tests/test_reconcile.py`.
+
+## Addendum (2026-10-04): after heading context
+
+Reconciliation now also accepts the segment's name in the headings just above a sentence
+(with the number within 5%). It also reconciles change amounts, which this sample does not
+contain. Re-running the same 25 cases against the verdicts above:
+
+- #6 and #20 (KHC North America net sales) are now `SEGMENT_VS_CONSOLIDATED`, correct.
+- #21 (JNJ Women's Health) is unchanged and correct.
+- The remaining misses are #3 (taxonomy gap), #11 (aggregation) and #22 (DIS
+  intersegment elimination).
+
+That gives **22 of 25 on this sample**. The change was motivated by these very cases, so
+22/25 is an in-sample figure and overstates generalization. An unbiased estimate needs a
+fresh sample (a different seed) reviewed blind.

@@ -47,7 +47,8 @@ Precision: "$1.2 billion" only pins a value to +/-4%, and a 10-K holds hundreds 
 so rules that search many candidate values would otherwise fire on coincidences. Hence:
 a restatement needs versions more than 2x the text's rounding apart; a non-GAAP
 reconciliation needs a difference larger than 2x the rounding; a segment match needs the
-member's name in the sentence or a number precise to 0.1%; a scale error must be a
+member's name in the sentence or in the headings just above it, or a number precise to
+0.1%; a scale error must be a
 thousand/million/billion slip on a number precise to 0.5%.
 """
 
@@ -125,10 +126,18 @@ _PRIOR_YEAR_RE = re.compile(
 PRECISE_RELATIVE_TOL = 0.001
 SCALE_RELATIVE_TOL = 0.005
 _GENERIC_MEMBER_WORDS = {
-    "member", "segment", "segments", "other", "others", "total", "revenue", "revenues",
-    "product", "products", "service", "services", "and", "the", "all", "operating",
-    "reportable", "corporate", "country", "statement", "axis",
+    # structure words of member names
+    "member", "segment", "segments", "other", "others", "total", "operating", "reportable",
+    "corporate", "country", "statement", "axis", "all", "consolidated", "eliminations",
+    # English stopwords that appear in member names ("IncomeFromEquityAffiliates")
+    "and", "the", "for", "from", "with", "into", "non", "per",
+    # generic financial terms that appear in nearly every heading
+    "revenue", "revenues", "product", "products", "service", "services", "sales", "income",
+    "net", "cost", "costs", "expense", "expenses", "gross", "assets", "liabilities",
+    "cash", "flow", "flows", "activities", "operations", "results", "items",
 }  # fmt: skip
+# A match corroborated only by a heading needs a number that pins the value within 5%.
+NAMED_MAX_RELATIVE_TOL = 0.05
 
 
 def member_words(dims: str) -> set[str]:
@@ -141,6 +150,34 @@ def member_words(dims: str) -> set[str]:
             if len(w) >= 3 and w not in _GENERIC_MEMBER_WORDS:
                 words.add(w)
     return words
+
+
+def _context(row: dict[str, Any]) -> str:
+    value = row.get("context_heading")
+    return value if isinstance(value, str) else ""
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]{3,}", text.lower()))
+
+
+def _corroboration(
+    dims: str, sentence: str, context: str, precise: bool, relative_tol: float = 0.0
+) -> str:
+    """Why a dimensional match counts, strongest evidence first.
+
+    The member named in the sentence itself counts at any precision. Named only in a
+    heading above is weaker evidence, so the number must also be within 5% ("$0.1 billion"
+    is +/-50% and could equal some member's value by chance).
+    """
+    members = member_words(dims)
+    if members & _words(sentence):
+        return "member named in sentence"
+    if precise:
+        return "precise number"
+    if context and relative_tol <= NAMED_MAX_RELATIVE_TOL and members & _words(context):
+        return "member named in heading"
+    return ""
 
 
 # Years a 10-K's comparatives can refer to, relative to its own fiscal year.
@@ -304,6 +341,7 @@ class Reconciler:
         cik: int,
         fy: int,
         accession: str,
+        context: str = "",
     ) -> tuple[Cause, str]:
         fact_value = float(fact["value"])
         # 1. restatement: the text equals a *distinguishably* different version of the fact
@@ -343,13 +381,13 @@ class Reconciler:
                 & (inline["period_start"] == fact["period_start"])
             ]
             precise = tol <= PRECISE_RELATIVE_TOL * abs(text_value)
-            words = set(re.findall(r"[a-z]{3,}", sentence.lower()))
             for d in dim.itertuples(index=False):
                 if not _close(text_value, float(d.value), tol):
                     continue
-                named = bool(member_words(str(d.dims)) & words)
-                if named or precise:
-                    why = "member named in sentence" if named else "precise number"
+                why = _corroboration(
+                    str(d.dims), sentence, context, precise, tol / max(abs(text_value), 1.0)
+                )
+                if why:
                     return Cause.SEGMENT_VS_CONSOLIDATED, f"equals {d.concept} [{d.dims}] ({why})"
         # 4. scale (a thousand/million/billion slip) or rounding
         if fact_value and text_value and tol <= SCALE_RELATIVE_TOL * abs(text_value):
@@ -446,6 +484,7 @@ class Reconciler:
         cause, detail = self.classify(
             text_value, tol, fact, versions, field, sentence, others,
             int(row["cik"]), period.fiscal_year, str(row["accession"]),
+            _context(row),
         )  # fmt: skip
         out["mismatch_cause"], out["cause_detail"] = cause.value, detail
         return out
@@ -510,8 +549,9 @@ class Reconciler:
             return out
         out["status"] = Status.MISMATCH.value
         cause, detail = self._classify_change(
-            text_value, tol, field, cur, prev, cur_versions, prev_versions, accession, sentence
-        )
+            text_value, tol, field, cur, prev, cur_versions, prev_versions, accession, sentence,
+            _context(row),
+        )  # fmt: skip
         out["mismatch_cause"], out["cause_detail"] = (
             cause.value,
             f"{detail}; {base_note}".strip("; "),
@@ -529,6 +569,7 @@ class Reconciler:
         prev_versions: pd.DataFrame,
         accession: str,
         sentence: str,
+        context: str = "",
     ) -> tuple[Cause, str]:
         """Ordered causes for change amounts (non-GAAP is not assessed for changes)."""
         cur_v, prev_v = float(cur["value"]), float(prev["value"])
@@ -567,14 +608,14 @@ class Reconciler:
 
             merged = at(cur).merge(at(prev), on=["concept", "dims"], suffixes=("_t", "_p"))
             precise = tol <= PRECISE_RELATIVE_TOL * text_value
-            words = set(re.findall(r"[a-z]{3,}", sentence.lower()))
             for d in merged.to_dict("records"):
                 change = float(d["value_t"]) - float(d["value_p"])
                 if not _close(text_value, change, tol):
                     continue
-                named = bool(member_words(str(d["dims"])) & words)
-                if named or precise:
-                    why = "member named in sentence" if named else "precise number"
+                why = _corroboration(
+                    str(d["dims"]), sentence, context, precise, tol / max(text_value, 1.0)
+                )
+                if why:
                     return Cause.SEGMENT_VS_CONSOLIDATED, (
                         f"equals the change in {d['concept']} [{d['dims']}] ({why})"
                     )
