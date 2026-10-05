@@ -401,6 +401,50 @@ def asof(
     console.print("[dim]'latest today' is what a backtest using current data would see.[/dim]")
 
 
+@app.command("screen")
+def screen_cmd(
+    date: Annotated[str, typer.Option(help="Screen date, YYYY-MM-DD (only data filed by then)")],
+    tickers: Annotated[str, typer.Option(help="Comma-separated tickers (default: all)")] = "",
+    lag_days: Annotated[int, typer.Option(help="Extra days before a filing counts")] = 0,
+    csv: Annotated[Path | None, typer.Option(help="Also write the full table to this CSV")] = None,
+    config: ConfigOpt = Path("config.yaml"),
+) -> None:
+    """Point-in-time Piotroski F-score and Altman Z'' for each company."""
+    from edgar_extract.pit_db import PointInTimeDB
+    from edgar_extract.screens import screen
+
+    settings = _load(config)
+    chosen = [t.strip().upper() for t in tickers.split(",") if t.strip()] or None
+    try:
+        with PointInTimeDB(settings.paths.pit_db, read_only=True) as pit:
+            df = screen(pit, date, chosen, lag_days=lag_days)
+    except FileNotFoundError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if df.empty:
+        console.print(f"No company had a 10-K filed on or before {date}.")
+        raise typer.Exit(0)
+    table = Table(title=f"Point-in-time screen as of {date}")
+    for col in ("ticker", "fiscal year end", "F-score", "signals", "Altman Z''", "zone", "missing"):
+        table.add_column(col, no_wrap=col != "missing")
+    for r in df.sort_values("ticker").to_dict("records"):
+        z = r["z_double_prime"]
+        table.add_row(
+            str(r["ticker"]), str(pd.Timestamp(r["fiscal_year_end"]).date()), str(r["f_score"]),
+            f"{r['f_signals']}/9", "" if pd.isna(z) else f"{z:.2f}",
+            "" if pd.isna(r["z_zone"]) else str(r["z_zone"]),
+            str(r["missing"]),
+        )  # fmt: skip
+    console.print(table)
+    console.print(
+        "[dim]Compare F-scores only across rows with 9/9 signals; see edgar_extract.screens "
+        "for definitions and fallbacks.[/dim]"
+    )
+    if csv is not None:
+        df.to_csv(csv, index=False)
+        console.print(f"wrote {csv}")
+
+
 @app.command()
 def dashboard(
     config: ConfigOpt = Path("config.yaml"),

@@ -376,6 +376,24 @@ class PointInTimeDB:
         out.loc[out["change"].abs() < 0.5, "restated_since"] = False  # same value re-reported
         return out
 
+    def fiscal_year_ends(
+        self, date: DateLike, tickers: Sequence[str] | None = None, *, lag_days: int = 0
+    ) -> pd.DataFrame:
+        """Fiscal-year ends per company: annual periods reported in a 10-K filed by ``date``.
+
+        Year-long durations also appear in 10-Q trailing-twelve-month figures and in proxy
+        pay-versus-performance tables; only 10-K-family filings define fiscal years here.
+        """
+        cutoff = _to_date(date) - timedelta(days=lag_days)
+        where, params = self._filters(tickers, ["NetIncomeLoss"], ("annual",), ("xbrl",), None)
+        sql = f"""
+            SELECT DISTINCT c.ticker, f.period_end
+            FROM facts f JOIN companies c USING (cik)
+            WHERE f.filing_date <= ? AND f.form LIKE '10-K%' AND {where}
+            ORDER BY c.ticker, f.period_end
+        """
+        return self.con.execute(sql, [cutoff, *params]).df()
+
     def restatements(
         self, tickers: Sequence[str] | None = None, fields: Sequence[str] | None = None
     ) -> pd.DataFrame:

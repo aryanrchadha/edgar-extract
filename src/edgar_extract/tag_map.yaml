@@ -135,6 +135,17 @@ fields:
       - us-gaap:InterestExpenseNonoperating
       - us-gaap:InterestExpenseDebt
 
+  PretaxIncome:
+    # Income from continuing operations before income taxes. Used as an EBIT fallback
+    # (pre-tax income + interest expense) for companies without an operating-income line.
+    period: duration
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest
+      - us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments
+
   IncomeTaxExpenseBenefit:
     period: duration
     unit: USD
@@ -221,6 +232,16 @@ fields:
     baseline_role: OTHER_NUMERIC
     tags:
       - us-gaap:Liabilities
+
+  LiabilitiesAndStockholdersEquity:
+    # Balance-sheet total. Used to derive total liabilities (minus equity) for companies
+    # that do not tag us-gaap:Liabilities (AMZN, DIS, INTC, KO, WMT in the default universe).
+    period: instant
+    unit: USD
+    role: OTHER_NUMERIC
+    baseline_role: OTHER_NUMERIC
+    tags:
+      - us-gaap:LiabilitiesAndStockholdersEquity
 
   LiabilitiesCurrent:
     period: instant
