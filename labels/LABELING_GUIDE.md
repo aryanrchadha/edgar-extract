@@ -39,3 +39,16 @@ The sample (`gold_candidates.jsonl`, 218 sentences) was drawn once, with a fixed
 from keyword strata (restatement language, forward-looking language, charges, revenue,
 and a uniform random stratum) and spread across companies. It was **not** drawn from
 either extractor's predictions, and the tool never shows a model or regex suggestion.
+
+## Checking your labels
+
+Each saved sentence records how long it was on screen. `edgar-extract label --audit`
+lists sentences saved in under 1.5 seconds per number, which is faster than a sentence can
+be read, plus labels the rules above exclude (RESTATED_PRIOR where the sentence never says
+restated, recast, revised or previously reported; a percentage labeled REVENUE or
+ONE_TIME_CHARGE). Training and evaluation drop the too-fast sentences automatically.
+`edgar-extract label --discard-fast` moves them to `gold_labels.discarded.jsonl` (nothing
+is deleted), and the next `edgar-extract label` run shows them again for relabeling.
+
+The tool discards keys typed before each number appears, so a held-down key or pasted text
+can no longer label spans that were never shown.

@@ -74,6 +74,7 @@ class TrainReport:
     test_companies: list[str]
     device: str
     epochs_loss: list[float] = field(default_factory=list)
+    n_gold_excluded_fast: int = 0
 
 
 def gold_to_examples(gold: Sequence[dict[str, Any]]) -> list[Example]:

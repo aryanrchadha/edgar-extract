@@ -23,10 +23,10 @@ pit = PointInTimeDB("data/pit.duckdb", read_only=True)
 pit.as_of("2022-03-01", tickers=["AAPL", "GE"], fields=["Revenues", "Assets"])
 ```
 
-> **Status (2026-10-03).** All milestones are built and tested except the final M4 step:
+> **Status (2026-10-06).** All milestones are built and tested except the final M4 step:
 > the NER model's metrics need ~200 human gold labels, which only a person can provide
-> (`edgar-extract label`; see [Labeling](#m4-labeling-and-the-ner-model)). No gold labels
-> or NER metrics are fabricated. [PLAN.md](PLAN.md) records the design, risks and what
+> (`edgar-extract label`; see [Labeling](#m4-labeling-and-the-ner-model)). 27 usable gold
+> sentences exist so far. No gold labels or NER metrics are fabricated. [PLAN.md](PLAN.md) records the design, risks and what
 > each milestone found.
 
 ## Architecture
@@ -94,7 +94,7 @@ uv run edgar-extract extract --ticker AAPL --years 5 [--extractor regex|ner]
 uv run edgar-extract asof --ticker GE --date 2023-03-01 --field Revenues [--include-text] [--lag-days 1]
 uv run edgar-extract screen --date 2024-05-01 [--tickers AAPL,GE] [--csv out.csv]
 uv run edgar-extract dashboard [--port 8501]
-uv run edgar-extract label [--prepare | --status] [--labeler INITIALS]
+uv run edgar-extract label [--prepare | --status | --audit | --discard-fast] [--labeler INITIALS]
 uv run edgar-extract ner train
 uv run edgar-extract ner evaluate
 ```
@@ -279,13 +279,19 @@ raw_text` against the stored section text, which is the lineage check.
   on the same test spans, written to `reports/ner_metrics.md` plus
   `models/ner/MODEL_CARD.md`. Evaluation refuses to run without at least 50 gold
   sentences.
+- **Label audit.** Each gold sentence stores how long it was on screen. Sentences saved
+  in under 1.5 s per number are excluded from training and evaluation (the metrics report
+  states how many). `label --audit` lists them along with labels the guide excludes, and
+  `label --discard-fast` moves them aside so they can be relabeled. The tool also drops
+  typed-ahead keys, so a held key or a paste cannot label spans nobody saw.
 
 ```bash
 uv run edgar-extract label --labeler <initials>   # one keypress per number; resumable
 uv run edgar-extract ner train && uv run edgar-extract ner evaluate
 ```
 
-**No gold labels exist yet, so there are no NER metrics.**
+**No NER metrics yet.** The first labeling pass saved 206 sentences, but 179 were saved
+at 0 to 1 s each (`label --audit`), leaving 27 usable, below the 50 minimum.
 
 ## M5: XBRL reconciliation and mismatch causes
 
@@ -416,7 +422,7 @@ tests/             offline tests; fixtures are trimmed real SEC responses
 ## Development
 
 ```bash
-uv run pytest                                   # 278 tests, offline: sockets are blocked
+uv run pytest                                   # 314 tests, offline: sockets are blocked
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src                                 # strict
 ```

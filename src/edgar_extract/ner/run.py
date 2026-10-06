@@ -16,7 +16,13 @@ from edgar_extract.ner.evaluate import (
     regex_predictor,
     role_metrics,
 )
-from edgar_extract.ner.labeling import NOT_NUMERIC, gold_summary, read_jsonl
+from edgar_extract.ner.labeling import (
+    MIN_SECONDS_PER_SPAN,
+    NOT_NUMERIC,
+    gold_summary,
+    read_jsonl,
+    split_fast,
+)
 
 # Below this many labeled sentences a held-out evaluation is not meaningful.
 MIN_GOLD_SENTENCES = 50
@@ -36,15 +42,22 @@ def _paths(settings: Settings) -> dict[str, Path]:
     }
 
 
-def load_gold(settings: Settings) -> list[dict[str, Any]]:
-    gold = read_jsonl(_paths(settings)["gold"])
+def load_gold(settings: Settings) -> tuple[list[dict[str, Any]], int]:
+    """(usable gold sentences, number excluded as labeled too fast to have been read)."""
+    gold, fast = split_fast(read_jsonl(_paths(settings)["gold"]))
     if len(gold) < MIN_GOLD_SENTENCES:
+        excluded = (
+            f"; {len(fast)} more were labeled in under {MIN_SECONDS_PER_SPAN} s per span and "
+            "are excluded (see `edgar-extract label --audit`)"
+            if fast
+            else ""
+        )
         raise RuntimeError(
-            f"only {len(gold)} gold sentences in {_paths(settings)['gold']} "
+            f"only {len(gold)} usable gold sentences in {_paths(settings)['gold']}{excluded} "
             f"(need >= {MIN_GOLD_SENTENCES}). Label with `edgar-extract label` first; "
             "metrics are never computed on silver labels."
         )
-    return gold
+    return gold, len(fast)
 
 
 def run_training(settings: Settings, *, epochs: int | None = None) -> dict[str, Any]:
@@ -58,7 +71,7 @@ def run_training(settings: Settings, *, epochs: int | None = None) -> dict[str, 
     )
 
     paths = _paths(settings)
-    gold = load_gold(settings)
+    gold, n_fast = load_gold(settings)
     silver = read_jsonl(paths["silver"])
     if not silver:
         raise FileNotFoundError(f"{paths['silver']} missing; run `edgar-extract label --prepare`")
@@ -80,6 +93,7 @@ def run_training(settings: Settings, *, epochs: int | None = None) -> dict[str, 
         test_companies=test_cos,
         device=pick_device(),
         epochs_loss=losses,
+        n_gold_excluded_fast=n_fast,
     )
     paths["train_report"].write_text(json.dumps(asdict(report), indent=1))
     return asdict(report)
@@ -90,7 +104,7 @@ def run_evaluation(settings: Settings) -> Path:
     from edgar_extract.ner.train import company_split
 
     paths = _paths(settings)
-    gold = load_gold(settings)
+    gold, n_fast = load_gold(settings)
     train_report = json.loads(paths["train_report"].read_text())
     cfg = train_report["config"]
     _, test_cos = company_split(gold, cfg["test_fraction"], cfg["seed"])
@@ -115,7 +129,13 @@ def run_evaluation(settings: Settings) -> Path:
         "## Data",
         "",
         f"- Gold labels: {summary['sentences']} sentences, {summary['spans']} spans, labeled by "
-        f"{', '.join(sorted({g['labeler'] for g in gold}))} with `edgar-extract label`.",
+        f"{', '.join(sorted({g['labeler'] for g in gold}))} with `edgar-extract label`"
+        + (
+            f"; {n_fast} further sentences were excluded as labeled in under "
+            f"{MIN_SECONDS_PER_SPAN} s per span (`edgar-extract label --audit`)."
+            if n_fast
+            else "."
+        ),
         f"- Held-out **test** companies ({len(test_cos)}): {', '.join(test_cos)}: "
         f"{len(test)} sentences, {test_spans} spans ({not_numeric} marked not-a-number).",
         f"- Training: {train_report['n_silver_sentences']} silver sentences "

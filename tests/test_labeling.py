@@ -295,3 +295,133 @@ def test_line_mode_session_saves_labels(
     )
     assert saved == 1
     assert [sp["label"] for sp in read_jsonl(out)[0]["spans"]] == ["REVENUE", "OTHER_NUMERIC"]
+
+
+# -- labeling speed and audit -----------------------------------------------------------
+
+
+def test_session_records_seconds_per_sentence(candidates: Path, tmp_path: Path) -> None:
+    ticks = iter([0.0, 7.5, 10.0, 10.4, 11.0])  # shown, saved; shown, saved; shown
+    it = keys("roooq")
+    out = tmp_path / "gold.jsonl"
+    run_labeling(
+        candidates, out, "tester", key_reader=lambda: next(it), printer=lambda s: None,
+        clock=lambda: next(ticks),
+    )  # fmt: skip
+    assert [g["seconds"] for g in read_jsonl(out)] == [7.5, 0.4]
+
+
+def gold_row(
+    n: int,
+    labels: list[str],
+    *,
+    seconds: float | None = None,
+    at: str = "",
+    sentence: str = "Revenue was $1.0 billion and margin was 40%.",
+) -> dict[str, object]:
+    spans = [
+        {"start": 0, "end": 1, "raw_text": "40%" if i else "$1.0 billion", "label": lab}
+        for i, lab in enumerate(labels)
+    ]
+    row: dict[str, object] = {
+        "sentence_id": f"S{n}", "ticker": "AAA", "sentence": sentence, "spans": spans,
+        "labeled_at": at,
+    }  # fmt: skip
+    if seconds is not None:
+        row["seconds"] = seconds
+    return row
+
+
+def test_audit_flags_fast_sentences_from_stored_seconds() -> None:
+    from edgar_extract.ner.labeling import audit_gold, split_fast
+
+    gold = [
+        gold_row(0, ["REVENUE", "OTHER_NUMERIC"], seconds=6.0),
+        gold_row(1, ["REVENUE", "OTHER_NUMERIC"], seconds=2.9),  # < 1.5 s x 2 spans
+        gold_row(2, ["OTHER_NUMERIC"], seconds=1.5),  # exactly the limit: kept
+    ]
+    flagged = audit_gold(gold)
+    assert [(r["sentence_id"], r["fast"]) for r in flagged] == [("S1", True)]
+    kept, fast = split_fast(gold)
+    assert [g["sentence_id"] for g in kept] == ["S0", "S2"]
+    assert [g["sentence_id"] for g in fast] == ["S1"]
+
+
+def test_audit_falls_back_to_gaps_between_saves() -> None:
+    from edgar_extract.ner.labeling import audit_gold
+
+    gold = [  # file order differs from time order; the earliest has no gap to measure
+        gold_row(1, ["OTHER_NUMERIC"], at="2026-10-05T00:30:01+00:00"),
+        gold_row(0, ["OTHER_NUMERIC"], at="2026-10-05T00:29:50+00:00"),
+        gold_row(2, ["OTHER_NUMERIC"], at="2026-10-05T00:30:02+00:00"),
+    ]
+    flagged = audit_gold(gold)
+    assert [(r["sentence_id"], r["seconds"]) for r in flagged] == [("S2", 1.0)]
+
+
+def test_audit_guide_checks() -> None:
+    from edgar_extract.ner.labeling import audit_gold
+
+    gold = [
+        gold_row(0, ["RESTATED_PRIOR", "OTHER_NUMERIC"], seconds=20),  # no restatement words
+        gold_row(
+            1,
+            ["RESTATED_PRIOR", "OTHER_NUMERIC"],
+            seconds=20,
+            sentence="Revenue, as previously reported, was $1.0 billion.",
+        ),
+        gold_row(2, ["REVENUE", "REVENUE"], seconds=20),  # 40% labeled REVENUE
+    ]
+    flagged = {r["sentence_id"]: r for r in audit_gold(gold)}
+    assert set(flagged) == {"S0", "S2"}
+    assert not flagged["S0"]["fast"]
+    assert flagged["S0"]["guide"] == ["$1.0 billion: RESTATED_PRIOR without restatement wording"]
+    assert flagged["S2"]["guide"] == ["40%: a percentage labeled REVENUE"]
+
+
+def test_flush_pending_input_only_on_a_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import termios
+
+    from edgar_extract.ner import labeling
+
+    calls: list[int] = []
+    monkeypatch.setattr(termios, "tcflush", lambda fd, which: calls.append(which))
+    monkeypatch.setattr("sys.stdin", io.StringIO("r\n"))
+    labeling.flush_pending_input()
+    assert calls == []
+
+    class FakeTty(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+        def fileno(self) -> int:
+            return 0
+
+    monkeypatch.setattr("sys.stdin", FakeTty(""))
+    labeling.flush_pending_input()
+    assert calls == [termios.TCIFLUSH]
+
+
+def test_cli_audit_and_discard_fast(tmp_path: Path) -> None:
+    import yaml
+    from typer.testing import CliRunner
+
+    from edgar_extract import cli
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        yaml.safe_dump({"sec": {"contact_email": "a@b.edu"}, "universe": {"tickers": ["X"]}})
+    )
+    labels = tmp_path / "labels"
+    labels.mkdir()
+    gold = labels / "gold_labels.jsonl"
+    write_jsonl(gold, [gold_row(0, ["REVENUE"], seconds=9), gold_row(1, ["REVENUE"], seconds=0.4)])
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["label", "--audit", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "2 gold sentences: 1 labeled in under 1.5 s per span" in result.output
+    result = runner.invoke(cli.app, ["label", "--discard-fast", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert [g["sentence_id"] for g in read_jsonl(gold)] == ["S0"]
+    assert [g["sentence_id"] for g in read_jsonl(labels / "gold_labels.discarded.jsonl")] == ["S1"]

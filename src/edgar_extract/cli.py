@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import pandas as pd
 import typer
@@ -256,6 +257,16 @@ def label(
         bool, typer.Option("--prepare", help="Build silver labels and the gold candidate sample")
     ] = False,
     status: Annotated[bool, typer.Option("--status", help="Show gold labeling progress")] = False,
+    audit: Annotated[
+        bool, typer.Option("--audit", help="Flag gold labels saved too fast or against the guide")
+    ] = False,
+    discard_fast: Annotated[
+        bool,
+        typer.Option(
+            "--discard-fast",
+            help="Move too-fast sentences to gold_labels.discarded.jsonl so they are relabeled",
+        ),
+    ] = False,
     labeler: Annotated[
         str, typer.Option(help="Your name or initials, stored with each label")
     ] = "",
@@ -279,6 +290,8 @@ def label(
         read_jsonl,
         read_line_key,
         run_labeling,
+        split_fast,
+        write_jsonl,
     )
     from edgar_extract.pipeline import labels_dir, prepare_labeling
 
@@ -298,6 +311,21 @@ def label(
     if status:
         console.print(gold_summary(read_jsonl(gold_file)))
         return
+    if audit:
+        _print_gold_audit(read_jsonl(gold_file))
+        return
+    if discard_fast:
+        kept, fast = split_fast(read_jsonl(gold_file))
+        if fast:
+            discarded = folder / "gold_labels.discarded.jsonl"
+            with discarded.open("a", encoding="utf-8") as fh:
+                for row in fast:
+                    fh.write(json.dumps(row, sort_keys=True) + "\n")
+            write_jsonl(gold_file, kept)
+            console.print(f"moved {len(fast)} sentences to {discarded}; kept {len(kept)}")
+        else:
+            console.print("no too-fast sentences")
+        return
     name = labeler or os.environ.get("USER", "unknown")
     try:
         reader = pick_key_reader(line_mode)
@@ -313,6 +341,33 @@ def label(
         raise typer.Exit(1) from exc
     except KeyboardInterrupt:
         console.print(f"\nstopped; progress is saved in {gold_file}")
+
+
+def _print_gold_audit(gold: list[dict[str, Any]]) -> None:
+    from rich.markup import escape
+
+    from edgar_extract.ner.labeling import MIN_SECONDS_PER_SPAN, audit_gold
+
+    rows = audit_gold(gold)
+    n_fast = sum(r["fast"] for r in rows)
+    n_guide = sum(bool(r["guide"]) for r in rows)
+    console.print(
+        f"{len(gold)} gold sentences: {n_fast} labeled in under {MIN_SECONDS_PER_SPAN} s per "
+        f"span, {n_guide} with labels the guide rules out"
+    )
+    table = Table("labeled_at", "ticker", "s", "spans", "fast", "guide")
+    for r in sorted(rows, key=lambda r: str(r["labeled_at"])):
+        secs = "-" if r["seconds"] is None else f"{r['seconds']:.0f}"
+        table.add_row(
+            str(r["labeled_at"]), r["ticker"], secs, str(r["spans"]),
+            "yes" if r["fast"] else "", escape("; ".join(r["guide"])),
+        )  # fmt: skip
+    console.print(table)
+    if n_fast:
+        console.print(
+            "Too-fast sentences are not used for training or evaluation. Run "
+            "`edgar-extract label --discard-fast`, then `edgar-extract label` to relabel them."
+        )
 
 
 ner_app = typer.Typer(help="Train and evaluate the token classifier (needs the `ner` extra).")

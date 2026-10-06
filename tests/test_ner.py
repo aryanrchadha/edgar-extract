@@ -198,3 +198,25 @@ def test_evaluation_refuses_without_gold(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="never computed on silver"):
         load_gold(load_settings(cfg))
+
+
+def test_evaluation_excludes_fast_gold(tmp_path: Path) -> None:
+    import yaml
+
+    from edgar_extract.config import load_settings
+    from edgar_extract.ner.labeling import write_jsonl
+    from edgar_extract.ner.run import load_gold
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        yaml.safe_dump({"sec": {"contact_email": "a@b.edu"}, "universe": {"tickers": ["X"]}})
+    )
+    span = {"start": 0, "end": 1, "raw_text": "$1", "label": "OTHER_NUMERIC"}
+    rows = [
+        {"sentence_id": f"S{i}", "ticker": "X", "sentence": "$1", "spans": [span],
+         "labeled_at": "", "seconds": 5.0 if i < 10 else 0.2}
+        for i in range(60)
+    ]  # fmt: skip
+    write_jsonl(tmp_path / "labels" / "gold_labels.jsonl", rows)
+    with pytest.raises(RuntimeError, match=r"only 10 usable gold sentences.*50 more were labeled"):
+        load_gold(load_settings(cfg))

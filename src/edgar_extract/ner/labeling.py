@@ -29,6 +29,7 @@ import json
 import random
 import re
 import sys
+import time
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -318,6 +319,22 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 # -- interactive gold labeling ---------------------------------------------------------
 
 
+def flush_pending_input() -> None:
+    """Discard keys typed before the current span was shown.
+
+    Without this, a held-down key (auto-repeat) or pasted text is read as a stream of
+    answers to spans nobody looked at. A no-op when stdin is not a terminal.
+    """
+    if not sys.stdin.isatty():
+        return
+    try:
+        import termios
+
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    except (ImportError, OSError):
+        return
+
+
 def read_key() -> str:
     """Read one keypress from the terminal without waiting for Enter (POSIX)."""
     import termios
@@ -327,6 +344,7 @@ def read_key() -> str:
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
+        flush_pending_input()
         ch = sys.stdin.read(1)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -339,6 +357,7 @@ def read_key() -> str:
 
 def read_line_key(prompt: str = "key + Enter> ") -> str:
     """Line-mode fallback: type the letter and press Enter (works in any terminal)."""
+    flush_pending_input()
     line = input(prompt).strip().lower()
     return line[:1]
 
@@ -402,11 +421,14 @@ def run_labeling(
     target: int = 200,
     key_reader: Callable[[], str] = read_key,
     printer: Callable[[str], None] | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> int:
     """Label candidate spans one keypress at a time; returns the number of sentences saved.
 
     Progress is appended to ``out_path`` after every sentence, so quitting (q or Ctrl-C)
-    never loses work, and rerunning resumes where you stopped.
+    never loses work, and rerunning resumes where you stopped. Each record stores
+    ``seconds``, the time from first showing the sentence to saving it, which
+    :func:`audit_gold` uses to flag sentences labeled faster than they can be read.
     """
     from rich.markup import escape
 
@@ -429,6 +451,7 @@ def run_labeling(
         spans = [dict(sp) for sp in cand["spans"]]
         j = 0
         skipped = False
+        shown_at = clock()
         while j < len(spans):
             printer("")
             where = f"{cand['ticker']} FY{cand['fiscal_year']} Item {cand['section']}"
@@ -481,6 +504,7 @@ def run_labeling(
                 ],
                 "labeler": labeler,
                 "labeled_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "seconds": round(clock() - shown_at, 2),
             }
             with out_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, sort_keys=True) + "\n")
@@ -492,6 +516,87 @@ def run_labeling(
         # after "u" the loop re-reads queue[i], which is now the restored sentence
     printer(f"all candidates done; saved {saved} sentences to {out_path}")
     return saved
+
+
+# -- gold label audit ------------------------------------------------------------------
+
+# Reading a 10-K sentence and deciding a role takes seconds per number. A sentence saved
+# in less than this many seconds per span was not read. Measured on the first labeling
+# session: its first 20 sentences took at least 2.0 s per span.
+MIN_SECONDS_PER_SPAN = 1.5
+
+# The guide's RESTATED_PRIOR definition: the sentence itself calls the figure restated.
+_RESTATEMENT_WORDS = re.compile(
+    r"restat|recast|revis|as previously reported|as originally reported", re.IGNORECASE
+)
+
+
+def _sentence_seconds(gold: list[dict[str, Any]]) -> list[float | None]:
+    """Seconds spent on each sentence: the stored ``seconds``, else the gap since the
+    previously saved sentence (``labeled_at`` order). ``None`` when neither exists (the
+    first sentence of a file without timings)."""
+    order = sorted(range(len(gold)), key=lambda i: str(gold[i].get("labeled_at", "")))
+    out: list[float | None] = [None] * len(gold)
+    prev: datetime | None = None
+    for i in order:
+        stamp = gold[i].get("labeled_at")
+        now = datetime.fromisoformat(stamp) if stamp else None
+        if gold[i].get("seconds") is not None:
+            out[i] = float(gold[i]["seconds"])
+        elif now is not None and prev is not None:
+            out[i] = (now - prev).total_seconds()
+        prev = now
+    return out
+
+
+def audit_gold(
+    gold: list[dict[str, Any]], *, min_seconds_per_span: float = MIN_SECONDS_PER_SPAN
+) -> list[dict[str, Any]]:
+    """One row per gold sentence with any warning; ``fast`` rows are unreliable.
+
+    Warnings:
+    - ``fast``: saved in under ``min_seconds_per_span`` seconds per span.
+    - ``guide``: a label the guide rules out from the sentence alone: RESTATED_PRIOR in
+      a sentence that never says restated/recast/revised/previously reported, or a
+      percentage labeled REVENUE or ONE_TIME_CHARGE.
+    """
+    rows = []
+    for g, secs in zip(gold, _sentence_seconds(gold), strict=True):
+        n_spans = max(1, len(g["spans"]))
+        fast = secs is not None and secs < min_seconds_per_span * n_spans
+        guide = []
+        for sp in g["spans"]:
+            label = sp.get("label")
+            if label == "RESTATED_PRIOR" and not _RESTATEMENT_WORDS.search(g["sentence"]):
+                guide.append(f"{sp['raw_text']}: RESTATED_PRIOR without restatement wording")
+            if label in ("REVENUE", "ONE_TIME_CHARGE") and "%" in sp["raw_text"]:
+                guide.append(f"{sp['raw_text']}: a percentage labeled {label}")
+        if fast or guide:
+            rows.append(
+                {
+                    "sentence_id": g["sentence_id"],
+                    "ticker": g["ticker"],
+                    "labeled_at": g.get("labeled_at"),
+                    "seconds": secs,
+                    "spans": len(g["spans"]),
+                    "fast": fast,
+                    "guide": guide,
+                }
+            )
+    return rows
+
+
+def split_fast(
+    gold: list[dict[str, Any]], *, min_seconds_per_span: float = MIN_SECONDS_PER_SPAN
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(kept, fast): gold sentences split by the ``fast`` audit warning, order kept."""
+    fast_ids = {
+        r["sentence_id"]
+        for r in audit_gold(gold, min_seconds_per_span=min_seconds_per_span)
+        if r["fast"]
+    }
+    kept = [g for g in gold if g["sentence_id"] not in fast_ids]
+    return kept, [g for g in gold if g["sentence_id"] in fast_ids]
 
 
 def gold_summary(gold: list[dict[str, Any]]) -> dict[str, Any]:
