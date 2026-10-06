@@ -79,8 +79,9 @@ requests per second. Later runs work offline with `--offline`.
 
 Edit [`config.yaml`](config.yaml) first:
 - `sec.contact_email` is **required**. Every request sends
-  `User-Agent: <app_name> <contact_email>`, as SEC's fair-access policy asks. It can also
-  be set with `EDGAR_EXTRACT_SEC__CONTACT_EMAIL`.
+  `User-Agent: <app_name> <contact_email>`, as SEC's fair-access policy asks. The
+  committed `config.yaml` leaves it empty: copy `.env.example` to `.env` (git-ignored) and
+  put your email there, or set `EDGAR_EXTRACT_SEC__CONTACT_EMAIL` in the environment.
 - `universe.tickers` lists the companies.
 - `universe.cik_overrides` pins a ticker to a historical CIK.
 - `sic_include` / `sic_exclude` are optional SIC filters (`"3571"`, `"6000-6999"`).
@@ -422,7 +423,7 @@ tests/             offline tests; fixtures are trimmed real SEC responses
 ## Development
 
 ```bash
-uv run pytest                                   # 314 tests, offline: sockets are blocked
+uv run pytest                                   # 315 tests, offline: sockets are blocked
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src                                 # strict
 ```

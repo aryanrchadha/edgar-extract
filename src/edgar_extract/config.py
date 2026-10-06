@@ -1,8 +1,9 @@
 """Typed configuration loaded from ``config.yaml`` with environment-variable overrides.
 
 Environment variables use the prefix ``EDGAR_EXTRACT_`` and ``__`` as the nesting
-delimiter, e.g. ``EDGAR_EXTRACT_SEC__CONTACT_EMAIL=me@example.edu``. Environment values
-override the YAML file.
+delimiter, e.g. ``EDGAR_EXTRACT_SEC__CONTACT_EMAIL=me@example.edu``. They can also sit in
+a git-ignored ``.env`` file next to the config, which keeps a personal contact email out of
+the committed ``config.yaml``. Precedence: environment, then ``.env``, then the YAML file.
 
 Relative paths in the ``paths`` section are resolved against the directory that contains
 the config file, so the CLI behaves the same from any working directory.
@@ -191,8 +192,8 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Environment beats the YAML file (which arrives as init kwargs).
-        return (env_settings, init_settings)
+        # Environment beats .env, which beats the YAML file (which arrives as init kwargs).
+        return (env_settings, dotenv_settings, init_settings)
 
 
 def load_settings(path: str | Path) -> Settings:
@@ -203,6 +204,6 @@ def load_settings(path: str | Path) -> Settings:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise ConfigError(f"{config_path} must contain a YAML mapping at the top level")
-    settings = Settings(**raw)
+    settings = Settings(_env_file=config_path.parent / ".env", **raw)
     settings.paths = settings.paths.resolved(config_path.parent)
     return settings

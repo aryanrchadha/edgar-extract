@@ -73,6 +73,14 @@ def test_environment_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert settings.years == 3
 
 
+def test_dotenv_next_to_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / ".env").write_text("EDGAR_EXTRACT_SEC__CONTACT_EMAIL=dotenv@example.org\n")
+    path = write_config(tmp_path, sec={"contact_email": ""})
+    assert load_settings(path).sec.contact_email == "dotenv@example.org"
+    monkeypatch.setenv("EDGAR_EXTRACT_SEC__CONTACT_EMAIL", "env@example.org")
+    assert load_settings(path).sec.contact_email == "env@example.org"
+
+
 def test_unknown_keys_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValidationError):
         load_settings(write_config(tmp_path, yearz=5))

@@ -6,6 +6,8 @@
 sec:
   # SEC fair-access policy: declare who you are. Sent as "User-Agent: <app_name> <contact_email>".
   app_name: "edgar-extract research"
+  # Required. Left empty here so a personal email is not committed: set it in a
+  # git-ignored .env file next to this config (see .env.example) or in the environment.
   contact_email: ""
   # SEC's ceiling is 10 req/s. Config validation rejects anything above 8.
   max_requests_per_second: 7.0

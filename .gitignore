@@ -13,3 +13,4 @@ models/ner/*
 !models/ner/train_report.json
 .DS_Store
 .claude/
+.env
