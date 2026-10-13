@@ -1,5 +1,7 @@
 # edgar-extract
 
+[![CI](https://github.com/aryanrchadha/edgar-extract/actions/workflows/ci.yml/badge.svg)](https://github.com/aryanrchadha/edgar-extract/actions/workflows/ci.yml)
+
 `edgar-extract` turns SEC 10-K filings into numbers you can backtest on without
 look-ahead. It:
 
@@ -427,6 +429,10 @@ uv run pytest                                   # 315 tests, offline: sockets ar
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src                                 # strict
 ```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs ruff and the tests on
+Python 3.11 and 3.12 without extras, plus a full job with every extra installed that
+runs strict mypy and the NER and dashboard tests, which skip without their extras.
 
 Fixtures under `tests/fixtures/` are real SEC responses, trimmed. They include 20 complete
 10-K documents and companyfacts for JNJ and GE. `scripts/record_fixtures.py` regenerates
