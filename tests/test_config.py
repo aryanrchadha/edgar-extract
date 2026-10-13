@@ -22,10 +22,12 @@ def write_config(tmp_path: Path, **overrides: object) -> Path:
     return path
 
 
-def test_repo_config_loads() -> None:
+def test_repo_config_loads(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The committed config carries no personal email; it comes from .env or the environment.
+    assert yaml.safe_load(REPO_CONFIG.read_text())["sec"]["contact_email"] == ""
+    monkeypatch.setenv("EDGAR_EXTRACT_SEC__CONTACT_EMAIL", "me@example.edu")
     settings = load_settings(REPO_CONFIG)
-    assert settings.sec.contact_email
-    assert "@" in settings.sec.user_agent
+    assert settings.sec.user_agent.endswith(" me@example.edu")
     assert settings.sec.max_requests_per_second <= 8
     assert len(settings.universe.tickers) == 20
     assert settings.universe.cik_overrides["XOM"] == 34088

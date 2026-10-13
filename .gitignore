@@ -4,7 +4,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .hypothesis/
-data/
+/data/
 models/*
 !models/.gitkeep
 !models/ner/
